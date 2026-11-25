@@ -14,7 +14,7 @@ if [ -n "$RENDER_EXTERNAL_HOSTNAME" ]; then
 fi
 
 # Safety fallback if database missing
-if [ ! -f /home/node/.n8n/.n8n/database.sqlite ]; then
+if [ ! -f /app/n8n-data/.n8n/database.sqlite ]; then
   echo "[Boot] Importing Project 03 workflow..."
   n8n import:workflow --input=/app/workflow.json || true
   n8n publish:workflow --id=67VqEYKQdxEn1RfQ || true
