@@ -468,10 +468,27 @@
       white-space: nowrap;
     }
     .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-optimizing { background: #ffedd5; color: #c2410c; }
     .badge-processing { background: #dbeafe; color: #1e40af; }
     .badge-shopify { background: #e0e7ff; color: #3730a3; }
     .badge-done { background: #d1fae5; color: #065f46; }
     .badge-error { background: #fee2e2; color: #991b1b; }
+
+    .row-notice {
+      display: none;
+      margin-top: 6px;
+      padding: 6px 10px;
+      border-radius: 8px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      font-size: 11.5px;
+      font-weight: 600;
+      line-height: 1.35;
+      align-items: center;
+      gap: 6px;
+    }
+    .row-notice.visible { display: inline-flex; }
 
     .mini-spin {
       width: 12px;
@@ -630,8 +647,8 @@
 
           <div class="helper-box">
             <strong>Sheet Format Tips:</strong><br/>
-            Columns in order: <code>SKU</code>, <code>Item Name</code>, <code>Wholesale Cost</code>, <code>Image URL</code>.<br/>
-            Ensure sharing is set to <em>&ldquo;Anyone with the link can view&rdquo;</em>. All rows load instantly and process concurrently with live progress tracking.
+            Columns in order: <code>SKU</code>, <code>Item Name (Optional)</code>, <code>Wholesale Cost USD (Optional)</code>, <code>Image URL</code>.<br/>
+            Even if Name or Cost is missing or mismatched, Gemini Vision AI inspects the image to set the real title &amp; USD price, then converts automatically to your Shopify store currency (INR &rupee;).
           </div>
         </div>
 
@@ -651,18 +668,18 @@
 
           <div class="field-row-2">
             <div class="field">
-              <label for="sku">Supplier SKU</label>
-              <input id="sku" name="sku" type="text" placeholder="BAG001" />
+              <label for="sku">Supplier SKU (Optional)</label>
+              <input id="sku" name="sku" type="text" placeholder="e.g. CAM-01 (Auto if empty)" />
             </div>
             <div class="field">
-              <label for="wholesaleCost">Wholesale Cost ($)</label>
-              <input id="wholesaleCost" name="wholesaleCost" type="number" step="0.01" placeholder="35.00" />
+              <label for="wholesaleCost">Wholesale Cost ($ USD)</label>
+              <input id="wholesaleCost" name="wholesaleCost" type="number" step="0.01" placeholder="Optional — AI estimates from image" />
             </div>
           </div>
 
           <div class="field">
-            <label for="rawName">Raw Item Name</label>
-            <input id="rawName" name="rawName" type="text" placeholder="Vintage Leather Commuter Backpack" />
+            <label for="rawName">Raw Item Name (Optional)</label>
+            <input id="rawName" name="rawName" type="text" placeholder="Optional — AI auto-identifies from photo" />
           </div>
 
           <div class="field">
@@ -723,11 +740,11 @@
             <div class="kpi-val" id="kpiDone">0 / 0</div>
           </div>
           <div class="kpi">
-            <div class="kpi-label">Enriched Retail Value</div>
-            <div class="kpi-val" id="kpiRetail" style="color:var(--accent);">$0.00</div>
+            <div class="kpi-label" id="kpiRetailLabel">Store Retail (INR)</div>
+            <div class="kpi-val" id="kpiRetail" style="color:var(--accent);">₹0</div>
           </div>
           <div class="kpi">
-            <div class="kpi-label">Projected Profit</div>
+            <div class="kpi-label">Est. Profit (USD)</div>
             <div class="kpi-val" id="kpiProfit" style="color:#047857;">$0.00</div>
           </div>
         </div>
@@ -796,6 +813,14 @@
     let startedAt = 0;
     let rowCache = {};
 
+    const CURRENCY_SYM = { USD: "$", INR: "₹", EUR: "€", GBP: "£", CAD: "CA$", AUD: "A$" };
+    function fmtStore(amount, code) {
+      const c = code || "INR";
+      const sym = CURRENCY_SYM[c] || `${c} `;
+      const n = Number(amount) || 0;
+      return c === "INR" ? `${sym}${Math.round(n).toLocaleString("en-IN")}` : `${sym}${n.toFixed(2)}`;
+    }
+
     document.getElementById("loadSampleBtn").addEventListener("click", () => {
       document.getElementById("sheetUrl").value = SAMPLE_SHEET;
       document.getElementById("sheetUrl").focus();
@@ -822,13 +847,46 @@
       if (row.status === "error") {
         return `<span class="badge badge-error" title="${esc(row.error)}">❌ Error</span>`;
       }
+      if (row.stage === "optimizing") {
+        return `<span class="badge badge-optimizing"><span class="mini-spin"></span>Optimizing Image</span>`;
+      }
       if (row.stage === "shopify") {
         return `<span class="badge badge-shopify"><span class="mini-spin"></span>Creating Draft</span>`;
       }
-      if (row.status === "processing" || row.stage === "ai") {
-        return `<span class="badge badge-processing"><span class="mini-spin"></span>AI Enriching</span>`;
+      if (row.status === "processing" || row.stage === "ai" || row.stage === "downloading") {
+        return `<span class="badge badge-processing"><span class="mini-spin"></span>${esc(row.stageLabel || "AI Enriching")}</span>`;
       }
       return `<span class="badge badge-pending">⏳ Pending</span>`;
+    }
+
+    function buildNoticeHtml(row) {
+      if (row.status === "done") return { text: "", visible: false };
+      if (row.status === "error") return { text: `⚠️ ${row.error || "Failed processing item"}`, visible: true };
+      const rowSec = row.startedAt ? (Date.now() - row.startedAt) / 1000 : 0;
+      if (row.stage === "optimizing") {
+        return { text: `🖼️ ${row.notice || "Optimizing high-res >20MP image before upload..."} (${rowSec.toFixed(1)}s)`, visible: true };
+      }
+      if (row.status === "processing" && rowSec >= 7.0) {
+        return {
+          text: `⏱ Taking a bit longer (${rowSec.toFixed(1)}s) — ${row.notice || "Optimizing media & running Gemini Vision / Shopify sync..."}`,
+          visible: true,
+        };
+      }
+      return { text: "", visible: false };
+    }
+
+    function refreshSlowNotices() {
+      Object.values(rowCache).forEach((row) => {
+        const el = document.getElementById(`notice-${row.index}`);
+        if (!el) return;
+        const n = buildNoticeHtml(row);
+        if (n.visible) {
+          el.textContent = n.text;
+          el.classList.add("visible");
+        } else {
+          el.classList.remove("visible");
+        }
+      });
     }
 
     function renderRow(row) {
@@ -839,11 +897,26 @@
         rowsBody.appendChild(tr);
       }
       tr.className = row.status === "done" ? "row-done" : "";
-      const meta = row.category ? `${esc(row.category)} • ${esc(row.material)} • ${esc(row.primary_color)}` : (row.stageLabel || "Queued for processing");
+      const meta = row.category
+        ? `${esc(row.category)} • ${esc(row.material)} • ${esc(row.primary_color)}`
+        : (row.notice || row.stageLabel || "Queued for processing");
       const thumb = row.thumbnail_url ? `<img class="thumb" src="${esc(row.thumbnail_url)}" alt="" />` : `<div class="thumb"></div>`;
       const action = row.admin_review_url
         ? `<a class="review-btn" href="${esc(row.admin_review_url)}" target="_blank" rel="noopener noreferrer">Review in Shopify ↗</a>`
         : `<span class="waiting-chip">${row.status === "error" ? "Skipped" : "Waiting..."}</span>`;
+
+      const costHtml = row.wholesale_cost
+        ? `<div>$${Number(row.wholesale_cost).toFixed(2)}</div>${row.has_explicit_cost === false ? `<div style="font-size:11px;color:#4f46e5;font-weight:600;">AI Estimated</div>` : ""}`
+        : `<span style="color:#64748b;font-size:12px;">AI Auto</span>`;
+
+      const storeCur = row.store_currency || "INR";
+      const retailHtml = row.retail_price
+        ? `<div style="font-weight:700;color:#059669;">${esc(fmtStore(row.store_retail_price || row.retail_price, storeCur))}</div>
+           <div style="font-size:11px;color:#64748b;">$${esc(row.retail_price)} USD</div>`
+        : `<span style="color:#94a3b8;font-size:12px;">Pending AI</span>`;
+
+      const marginHtml = row.gross_margin ? `+${esc(row.gross_margin)}` : `<span style="color:#94a3b8;">—</span>`;
+      const noticeState = buildNoticeHtml(row);
 
       tr.innerHTML = `
         <td><span class="sku-tag">${esc(row.sku)}</span></td>
@@ -851,17 +924,15 @@
           <div class="prod-cell">
             ${thumb}
             <div>
-              <div style="font-weight:700;color:#0f172a;">${esc(row.product_title || row.raw_name)}</div>
+              <div style="font-weight:700;color:#0f172a;">${esc(row.product_title || row.raw_name || "Detecting product...")}</div>
               <div style="font-size:12px;color:#64748b;margin-top:2px;">${meta}</div>
+              <div class="row-notice ${noticeState.visible ? "visible" : ""}" id="notice-${row.index}">${esc(noticeState.text)}</div>
             </div>
           </div>
         </td>
-        <td>$${Number(row.wholesale_cost || 0).toFixed(2)}</td>
-        <td>
-          <span style="font-weight:700;color:#059669;">$${esc(row.retail_price)}</span>
-          <div style="font-size:11px;color:#94a3b8;text-decoration:line-through;">$${esc(row.compare_at_price)}</div>
-        </td>
-        <td style="color:#047857;font-weight:600;">+${esc(row.gross_margin)}</td>
+        <td>${costHtml}</td>
+        <td>${retailHtml}</td>
+        <td style="color:#047857;font-weight:600;">${marginHtml}</td>
         <td>${statusBadgeHtml(row)}</td>
         <td>${action}</td>
       `;
@@ -872,22 +943,24 @@
       const doneCount = job.completed || 0;
       const finishedCount = doneCount + (job.failed || 0);
       const pct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
+      const cur = job.storeCurrency || "INR";
 
       progressBar.style.width = `${pct}%`;
       counterFraction.textContent = `${doneCount} / ${total}`;
       kpiPct.textContent = `${pct}%`;
       kpiDone.textContent = `${doneCount} / ${total}`;
+      document.getElementById("kpiRetailLabel").textContent = `Store Retail (${cur})`;
 
-      let retailSum = 0;
-      let profitSum = 0;
+      let storeRetailSum = 0;
+      let profitUsdSum = 0;
       (job.rows || []).forEach((r) => {
         if (r.status === "done") {
-          retailSum += parseFloat(r.retail_price) || 0;
-          profitSum += parseFloat(r.profit_per_unit) || 0;
+          storeRetailSum += parseFloat(r.store_retail_price || r.retail_price) || 0;
+          profitUsdSum += parseFloat(r.profit_per_unit) || 0;
         }
       });
-      kpiRetail.textContent = `$${retailSum.toFixed(2)}`;
-      kpiProfit.textContent = `$${profitSum.toFixed(2)}`;
+      kpiRetail.textContent = fmtStore(storeRetailSum, cur);
+      kpiProfit.textContent = `$${profitUsdSum.toFixed(2)}`;
 
       if (job.status === "completed" || job.status === "failed") {
         if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
@@ -958,7 +1031,8 @@
         startedAt = Date.now();
         elapsedTimer = setInterval(() => {
           elapsedLabel.textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
-        }, 100);
+          refreshSlowNotices();
+        }, 250);
 
         applyFullSnapshot(data);
 

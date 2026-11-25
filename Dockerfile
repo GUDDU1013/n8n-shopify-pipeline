@@ -1,7 +1,7 @@
 FROM ghcr.io/n8n-io/n8n:2.35.7
 
 USER root
-RUN mkdir -p /app/n8n-data /home/node/.n8n && chmod -R 777 /app /home/node/.n8n
+RUN apk add --no-cache vips-tools && mkdir -p /app/n8n-data /home/node/.n8n && chmod -R 777 /app /home/node/.n8n
 
 COPY workflow.json /app/workflow.json
 COPY entrypoint.sh /app/entrypoint.sh
