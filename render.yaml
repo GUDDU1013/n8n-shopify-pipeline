@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: n8n-shopify-pipeline
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SHOPIFY_SHOP
+        value: all-hydro-test.myshopify.com
+      - key: SHOPIFY_CLIENT_ID
+        sync: false
+      - key: SHOPIFY_CLIENT_SECRET
+        sync: false
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: N8N_OWNER_EMAIL
+        value: ridam.chakraborty@webskitters.com
+      - key: N8N_OWNER_PASSWORD
+        sync: false

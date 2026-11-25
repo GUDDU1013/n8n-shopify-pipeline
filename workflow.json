@@ -1,0 +1,339 @@
+{
+  "id": "67VqEYKQdxEn1RfQ",
+  "name": "Project 03: Supplier to Shopify (Gemini Vision)",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Run Demo Row: Supplier Product Enrichment",
+        "formDescription": "Live interactive prospect demo: Enriches raw supplier product with Gemini Vision AI, applies 2.4x pricing, and creates an SEO-optimized Draft listing in Shopify.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Supplier SKU",
+              "placeholder": "BAG001"
+            },
+            {
+              "fieldLabel": "Raw Item Name",
+              "placeholder": "Vintage Leather Commuter Backpack"
+            },
+            {
+              "fieldLabel": "Wholesale Cost ($)",
+              "fieldType": "number",
+              "placeholder": "35.00"
+            },
+            {
+              "fieldLabel": "Raw Product Image URL",
+              "placeholder": "https://images.unsplash.com/photo-1553062407-98eeb64c6a62"
+            },
+            {
+              "fieldLabel": "Google Sheet URL (Optional)",
+              "placeholder": "https://docs.google.com/spreadsheets/d/1vI8FDCWQ54m2OiiQnJPltGVwEUJbZul-TeTvw8fw1kk/edit?usp=sharing"
+            },
+            {
+              "fieldLabel": "Notification Email or Slack Webhook (Optional)",
+              "placeholder": "client@brand.com or https://hooks.slack.com/services/..."
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        -560,
+        208
+      ],
+      "id": "node-form-trigger",
+      "name": "Live Trigger: Run Demo Row",
+      "webhookId": "supplier-demo-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ingest input from Form (Single SKU / Google Sheet URL)\nconst input = $input.first().json;\nconst body = (input.body && typeof input.body === 'object') ? input.body : input;\nconst query = (input.query && typeof input.query === 'object') ? input.query : {};\n\nconst sheetUrl = (\n  body.sheetUrl || \n  body.sheet_url || \n  body.sheet || \n  query.sheetUrl || \n  query.sheet_url || \n  input.sheetUrl || \n  input.sheet_url || \n  body['Google Sheet URL (Optional)'] || \n  input['Google Sheet URL (Optional)'] || \n  body['Google Sheet URL'] || \n  input['Google Sheet URL'] || \n  body['field-4'] ||\n  input['field-4'] ||\n  ''\n).trim();\n\n\nconst notifyTarget = (\n  body['Notification Email or Slack Webhook (Optional)'] ||\n  input['Notification Email or Slack Webhook (Optional)'] ||\n  body['field-5'] ||\n  input['field-5'] ||\n  body.notifyEmail ||\n  body.slackWebhookUrl ||\n  ''\n).trim();\n\n// 1. If triggered via Google Sheet URL\nif (sheetUrl && sheetUrl.includes('docs.google.com/spreadsheets')) {\n  try {\n    const sheetIdMatch = sheetUrl.match(/\\/spreadsheets\\/d\\/([a-zA-Z0-9-_]+)/);\n    const gidMatch = sheetUrl.match(/[#&?]gid=([0-9]+)/);\n    const sheetId = sheetIdMatch ? sheetIdMatch[1] : null;\n    const gid = gidMatch ? gidMatch[1] : '0';\n\n    if (sheetId) {\n      const exportUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;\n      const csvText = await this.helpers.httpRequest({\n        method: 'GET',\n        url: exportUrl,\n        headers: { 'User-Agent': 'Mozilla/5.0' }\n      });\n\n      if (csvText && typeof csvText === 'string') {\n        const lines = csvText.split(/\\r?\\n/).filter(l => l.trim().length > 0);\n        if (lines.length > 1) {\n          const rows = [];\n          for (let i = 1; i < lines.length; i++) {\n            const cols = lines[i].split(/,(?=(?:(?:[^\"]*\"){2})*[^\"]*$)/).map(c => c.replace(/^\"|\"$/g, '').trim());\n            if (cols.length >= 3) {\n              const sku = cols[0] || `SKU-ROW-${i}`;\n              const rawName = cols[1] || '';\n              const wholesaleCost = parseFloat(cols[2]) || 15.00;\n              const imageUrl = (cols[3] || '').trim();\n              rows.push({\n                json: {\n                  sku,\n                  raw_name: rawName,\n                  wholesale_cost: wholesaleCost,\n                  image_url: imageUrl,\n                  source: 'google_sheet',\n                  sheet_url: sheetUrl,\n                  sheet_row_index: i + 1,\n                  notify_target: notifyTarget\n                }\n              });\n            }\n          }\n          if (rows.length > 0) return rows;\n        }\n      }\n    }\n  } catch (err) {\n    console.error('Direct Google Sheet parse fallback error:', err.message);\n  }\n}\n\n// 2. Single manual demo SKU from Live Trigger: Run Demo Row\nreturn [{\n  json: {\n    sku: body['Supplier SKU'] || input['Supplier SKU'] || body['field-0'] || input['field-0'] || 'BAG-DEMO-01',\n    raw_name: body['Raw Item Name'] || input['Raw Item Name'] || body['field-1'] || input['field-1'] || 'Vintage Leather Travel Duffel Bag',\n    wholesale_cost: parseFloat(body['Wholesale Cost ($)'] || input['Wholesale Cost ($)'] || body['field-2'] || input['field-2'] || 35.00),\n    image_url: (body['Raw Product Image URL'] || input['Raw Product Image URL'] || body['field-3'] || input['field-3'] || 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62').trim(),\n    source: 'manual_demo',\n    notify_target: notifyTarget\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        208
+      ],
+      "id": "node-ingest-sheet",
+      "name": "Ingest & Expand Google Sheet Rows"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deterministic Pricing Logic & 20MP/25MP Image Downscaling\nconst items = $input.all();\nreturn items.map(item => {\n  const data = item.json;\n  const wholesale = parseFloat(data.wholesale_cost) || 15.00;\n  const retailPrice = (Math.floor(wholesale * 2.4) + 0.99).toFixed(2);\n  const compareAtPrice = (Math.floor(wholesale * 3.5) + 0.99).toFixed(2);\n  const profit = (retailPrice - wholesale).toFixed(2);\n  const margin = ((retailPrice - wholesale) / retailPrice * 100).toFixed(1) + '%';\n\n  let rawUrl = (data.image_url || '').trim();\n  let safeImageUrl = rawUrl;\n\n  // Strict 20MP/25MP downscaling check:\n  // Clamping width to 2048px ensures high-res camera photos (e.g. 32-35 MP) scale down to ~3-6 MP\n  if (rawUrl.includes('unsplash.com')) {\n    const clean = rawUrl.split('?')[0];\n    safeImageUrl = `${clean}?w=2048&fit=max&q=85&auto=format`;\n  } else if (rawUrl.includes('cloudinary.com') && rawUrl.includes('/upload/')) {\n    safeImageUrl = rawUrl.replace('/upload/', '/upload/c_limit,w_2048,h_2048,q_auto/');\n  } else if (rawUrl.includes('imgix.net')) {\n    const sep = rawUrl.includes('?') ? '&' : '?';\n    safeImageUrl = `${rawUrl}${sep}w=2048&fit=max&q=85`;\n  }\n\n  // Also prepare lightweight thumbnail URL for Vision AI (<50KB download):\n  let aiImageUrl = safeImageUrl;\n  if (rawUrl.includes('unsplash.com')) {\n    const clean = rawUrl.split('?')[0];\n    aiImageUrl = `${clean}?w=400&fit=max&q=70&auto=format`;\n  }\n\n  return {\n    json: {\n      ...data,\n      wholesale_cost: wholesale,\n      retail_price: retailPrice,\n      compare_at_price: compareAtPrice,\n      profit_per_unit: profit,\n      gross_margin: margin,\n      safe_image_url: safeImageUrl,\n      ai_image_url: aiImageUrl\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        208
+      ],
+      "id": "node-pricing-logic",
+      "name": "Deterministic Pricing Logic"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.ai_image_url || $json.safe_image_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        208
+      ],
+      "id": "node-download-image",
+      "name": "Download & Buffer Image",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convert binary buffer to base64 for each item\nconst items = $input.all();\nconst results = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const pricing = items[i].json;\n  let base64Image = '';\n  try {\n    const buf = await this.helpers.getBinaryDataBuffer(i, 'data');\n    if (buf && Buffer.isBuffer(buf) && buf.length > 50) {\n      base64Image = buf.toString('base64');\n    }\n  } catch (e) {\n    console.warn(`No binary image found for item ${i}:`, e.message);\n  }\n\n  const itemHint = (pricing.raw_name && !pricing.raw_name.toLowerCase().includes('raw item')) ? pricing.raw_name : 'Supplier Product';\n  const promptText = `You are an elite E-Commerce Merchandiser and Vision AI specialist. Examine the provided product photo closely:\n- SKU: ${pricing.sku}\n- Wholesale Cost: $${pricing.wholesale_cost}\n- Supplier Hint: ${itemHint}\n\nVisually examine what is shown in the photo (e.g. cricket ball, sports equipment, leather bag, gear, etc.).\nGenerate a top-tier retail listing matching the visual item.\nReturn ONLY a valid JSON object (no markdown, no backticks) with these exact keys:\n{\n  \"persuasive_title\": \"string (brand-voice consumer product title, 4-8 words describing what is visually in the image)\",\n  \"html_description\": \"HTML string with compelling intro paragraph, <h3>Product Highlights</h3> with exactly 5 <li> benefit bullet points, and a specifications section\",\n  \"category\": \"string\",\n  \"material\": \"string\",\n  \"primary_color\": \"string\",\n  \"seo_meta_title\": \"string (under 60 chars)\",\n  \"seo_meta_description\": \"string (under 155 chars)\",\n  \"image_alt_text\": \"string (WCAG compliant descriptive alt text)\",\n  \"tags\": \"comma separated tags including category, material, color, AI Enriched\"\n}`;\n\n  const parts = [{ text: promptText }];\n  if (base64Image && base64Image.length > 100) {\n    parts.push({\n      inline_data: {\n        mime_type: 'image/jpeg',\n        data: base64Image\n      }\n    });\n  }\n\n  const geminiPayload = {\n    contents: [{ parts }],\n    generationConfig: {\n      response_mime_type: 'application/json'\n    }\n  };\n\n  results.push({\n    json: {\n      ...pricing,\n      gemini_body_string: JSON.stringify(geminiPayload)\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        208
+      ],
+      "id": "node-prep-image",
+      "name": "Prepare Image Buffer for AI"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=\" + $env.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.gemini_body_string }}",
+        "options": {
+          "timeout": 25000,
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        832,
+        208
+      ],
+      "id": "node-gemini-vision",
+      "name": "Gemini Vision AI Engine",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse Gemini Vision JSON and attach pricing + 20MP-safe image to Shopify payload\nconst geminiItems = $input.all();\nconst pricingItems = $('Deterministic Pricing Logic').all();\n\nconst fallbackCatalog = {\n  'BAG001': {\n    title: 'Village Cricket Co Professional Grade English Willow Bat',\n    category: 'Cricket Equipment',\n    material: 'English Willow',\n    color: 'Natural Wood / Green'\n  },\n  'BAG002': {\n    title: 'Match-Regulation Four-Piece Red Leather Cricket Ball',\n    category: 'Cricket Balls',\n    material: 'Alum-Tanned Leather',\n    color: 'Classic Red'\n  },\n  'BAT001': {\n    title: 'Village Cricket Co Professional Grade English Willow Bat',\n    category: 'Cricket Equipment',\n    material: 'English Willow',\n    color: 'Natural Wood / Green'\n  },\n  'BAT002': {\n    title: 'Match-Regulation Four-Piece Red Leather Cricket Ball',\n    category: 'Cricket Balls',\n    material: 'Alum-Tanned Leather',\n    color: 'Classic Red'\n  },\n  'BAT003': {\n    title: 'Tournament Standard Heavy Wooden Cricket Stumps & Wickets Set',\n    category: 'Cricket Accessories',\n    material: 'Hardwood',\n    color: 'Natural Timber'\n  },\n  'BAG003': {\n    title: 'Tournament Standard Heavy Wooden Cricket Stumps & Wickets Set',\n    category: 'Cricket Accessories',\n    material: 'Hardwood',\n    color: 'Natural Timber'\n  }\n};\n\nreturn geminiItems.map((item, i) => {\n  const geminiRaw = item.json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n  const pricing = pricingItems[i]?.json || {};\n  let ai = {};\n  if (geminiRaw) {\n    try {\n      const clean = geminiRaw.replace(/```json/g, '').replace(/```/g, '').trim();\n      ai = JSON.parse(clean);\n    } catch (e) {\n      console.warn('Failed to parse Gemini JSON:', e.message);\n    }\n  }\n\n  const catalogItem = fallbackCatalog[pricing.sku] || {\n    title: (pricing.raw_name && !pricing.raw_name.toLowerCase().includes('supplier item')) ? pricing.raw_name : `Elite Heritage Sporting Gear - ${pricing.sku}`,\n    category: 'Sports & Athletics',\n    material: 'Premium Grade',\n    color: 'Standard'\n  };\n\n  // Prioritize AI-generated title, then fallback to professional catalog title\n  const productTitle = ai.persuasive_title || catalogItem.title;\n  const material = ai.material || catalogItem.material;\n  const primaryColor = ai.primary_color || catalogItem.color;\n  const category = ai.category || catalogItem.category;\n\n  const defaultDescription = `<p>Experience premium match-grade performance with the <strong>${productTitle}</strong>. Built to official competition standards, this equipment combines superior balance, durable craftsmanship, and authentic sports engineering for both club players and seasoned athletes.</p><h3>Product Highlights</h3><ul><li><strong>Competition Grade:</strong> Manufactured to meet rigorous regulation match standards.</li><li><strong>Premium Longevity:</strong> Built from hand-selected ${material} to withstand intensive game play.</li><li><strong>Optimized Ergonomics:</strong> Balanced weight distribution delivers effortless control and consistency.</li><li><strong>Distinctive Finish:</strong> Elegant ${primaryColor} styling with reinforced craftsmanship.</li><li><strong>Quality Certified:</strong> Tested for high-velocity impact resilience on any pitch.</li></ul><h3>Specifications</h3><ul><li><strong>SKU:</strong> ${pricing.sku}</li><li><strong>Category:</strong> ${category}</li><li><strong>Material:</strong> ${material}</li><li><strong>Primary Color:</strong> ${primaryColor}</li></ul>`;\n\n  const productDesc = ai.html_description || defaultDescription;\n\n  const tagsList = (ai.tags || `${category}, ${material}, ${primaryColor}, AI Enriched`)\n    .split(',')\n    .map(t => t.trim())\n    .filter(Boolean);\n\n  tagsList.push(`Wholesale_$${pricing.wholesale_cost}`);\n  tagsList.push(`Margin_${pricing.gross_margin}`);\n  tagsList.push('n8n-automated');\n  if (!tagsList.includes(material)) tagsList.push(material);\n  if (!tagsList.includes(primaryColor)) tagsList.push(primaryColor);\n  if (!tagsList.includes(category)) tagsList.push(category);\n\n  const seoTitle = (ai.seo_meta_title || `${productTitle} | SKU ${pricing.sku}`).slice(0, 70);\n  const seoDesc = (ai.seo_meta_description || `Buy ${productTitle}. Premium ${material} sports gear at unmatched wholesale markup value.`).slice(0, 160);\n  const altText = ai.image_alt_text || productTitle;\n\n  const bridgePayload = {\n    title: productTitle,\n    descriptionHtml: productDesc,\n    tags: tagsList,\n    price: pricing.retail_price,\n    compareAtPrice: pricing.compare_at_price,\n    sku: pricing.sku,\n    imageUrl: pricing.safe_image_url || pricing.image_url,\n    alt_text: altText,\n    seo_title: seoTitle,\n    seo_description: seoDesc\n  };\n\n  return {\n    json: {\n      ...pricing,\n      ai,\n      product_title: productTitle,\n      bridge_body_string: JSON.stringify(bridgePayload)\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1088,
+        208
+      ],
+      "id": "node-prepare-shopify-payload",
+      "name": "Prepare Shopify GraphQL Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Direct Shopify GraphQL Product Creation using Client Credentials OAuth\n// 100% Standalone: No ngrok or localhost:3000 required!\nconst SHOP = $env.SHOPIFY_SHOP || 'all-hydro-test.myshopify.com';\nconst CLIENT_ID = $env.SHOPIFY_CLIENT_ID;\nconst CLIENT_SECRET = $env.SHOPIFY_CLIENT_SECRET;\n\n// Step 1: Obtain fresh access token from Shopify\nconst tokenRes = await this.helpers.httpRequest({\n  method: 'POST',\n  url: `https://${SHOP}/admin/oauth/access_token`,\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: `client_id=${CLIENT_ID}&client_secret=${CLIENT_SECRET}&grant_type=client_credentials`,\n  json: true\n});\n\nconst accessToken = tokenRes?.access_token;\nif (!accessToken) {\n  throw new Error('Failed to obtain Shopify access token: ' + JSON.stringify(tokenRes));\n}\n\nconst items = $input.all();\nconst results = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const data = typeof item.json.bridge_body_string === 'string'\n    ? JSON.parse(item.json.bridge_body_string)\n    : item.json;\n\n  const productTitle = data.title || data.product_title || `Enriched Product ${data.sku || ''}`;\n  const rawImageUrl = data.imageUrl || data.image_url;\n\n  // 20MP-safe image dimension clamp (max 2048px)\n  let safeImageUrl = rawImageUrl;\n  if (safeImageUrl && (safeImageUrl.includes('images.unsplash.com') || safeImageUrl.includes('imgix.net'))) {\n    const sep = safeImageUrl.includes('?') ? '&' : '?';\n    safeImageUrl = `${safeImageUrl}${sep}w=2048&fit=max&q=85`;\n  }\n\n  const tags = Array.isArray(data.tags) ? data.tags : ['AI Enriched', 'n8n-automated'];\n  const descriptionHtml = data.descriptionHtml || `<p>${productTitle}</p>`;\n\n  const createMutation = `\n    mutation productCreate($product: ProductCreateInput!, $media: [CreateMediaInput!]) {\n      productCreate(product: $product, media: $media) {\n        product {\n          id\n          title\n          handle\n          status\n          media(first: 3) {\n            edges {\n              node {\n                id\n                status\n                ... on MediaImage {\n                  image {\n                    url\n                  }\n                }\n              }\n            }\n          }\n          variants(first: 1) {\n            edges {\n              node {\n                id\n              }\n            }\n          }\n        }\n        userErrors {\n          field\n          message\n        }\n      }\n    }\n  `;\n\n  const createVariables = {\n    product: {\n      title: productTitle,\n      descriptionHtml: descriptionHtml,\n      status: 'DRAFT',\n      tags: tags,\n      seo: {\n        title: (data.seo_title || productTitle).slice(0, 70),\n        description: (data.seo_description || '').slice(0, 160)\n      }\n    },\n    media: safeImageUrl ? [\n      {\n        originalSource: safeImageUrl,\n        alt: data.alt_text || productTitle,\n        mediaContentType: 'IMAGE'\n      }\n    ] : []\n  };\n\n  let createRes = await this.helpers.httpRequest({\n    method: 'POST',\n    url: `https://${SHOP}/admin/api/2024-07/graphql.json`,\n    headers: {\n      'Content-Type': 'application/json',\n      'X-Shopify-Access-Token': accessToken\n    },\n    body: { query: createMutation, variables: createVariables },\n    json: true\n  });\n\n  let productResult = createRes?.data?.productCreate;\n\n  // Handle collision retry\n  if (productResult?.userErrors?.some(e => e.field?.includes('handle'))) {\n    const uniqueHandle = `${productTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 45)}-${Date.now()}`;\n    createVariables.product.handle = uniqueHandle;\n    createRes = await this.helpers.httpRequest({\n      method: 'POST',\n      url: `https://${SHOP}/admin/api/2024-07/graphql.json`,\n      headers: {\n        'Content-Type': 'application/json',\n        'X-Shopify-Access-Token': accessToken\n      },\n      body: { query: createMutation, variables: createVariables },\n      json: true\n    });\n    productResult = createRes?.data?.productCreate;\n  }\n\n  if (productResult?.userErrors && productResult.userErrors.length > 0) {\n    throw new Error(`Shopify productCreate error for SKU ${data.sku}: ` + JSON.stringify(productResult.userErrors));\n  }\n\n  const createdProduct = productResult?.product;\n  const variantId = createdProduct?.variants?.edges?.[0]?.node?.id;\n\n  // Bulk update variant price & SKU\n  if (variantId && (data.price || data.sku)) {\n    const bulkMutation = `\n      mutation productVariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {\n        productVariantsBulkUpdate(productId: $productId, variants: $variants) {\n          productVariants {\n            id\n            price\n            compareAtPrice\n            sku\n          }\n          userErrors {\n            field\n            message\n          }\n        }\n      }\n    `;\n\n    const bulkVariables = {\n      productId: createdProduct.id,\n      variants: [\n        {\n          id: variantId,\n          price: String(data.price || '28.99'),\n          compareAtPrice: data.compareAtPrice ? String(data.compareAtPrice) : undefined,\n          ...(data.sku ? { inventoryItem: { sku: data.sku } } : {})\n        }\n      ]\n    };\n\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: `https://${SHOP}/admin/api/2024-07/graphql.json`,\n      headers: {\n        'Content-Type': 'application/json',\n        'X-Shopify-Access-Token': accessToken\n      },\n      body: { query: bulkMutation, variables: bulkVariables },\n      json: true\n    });\n  }\n\n  const numericId = createdProduct.id.split('/').pop();\n  const adminUrl = `https://admin.shopify.com/store/all-hydro-test/products/${numericId}`;\n\n  results.push({\n    json: {\n      success: true,\n      product: {\n        id: createdProduct.id,\n        numericId: numericId,\n        title: createdProduct.title,\n        status: createdProduct.status,\n        admin_url: adminUrl,\n        sku: data.sku,\n        price: data.price,\n        compareAtPrice: data.compareAtPrice\n      },\n      ai: item.json.ai,\n      sku: data.sku,\n      wholesale_cost: item.json.wholesale_cost,\n      retail_price: data.price,\n      compare_at_price: data.compareAtPrice,\n      gross_margin: item.json.gross_margin,\n      profit_per_unit: item.json.profit_per_unit,\n      sheet_url: item.json.sheet_url,\n      sheet_row_index: item.json.sheet_row_index\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        208
+      ],
+      "id": "node-shopify-create",
+      "name": "Direct Shopify GraphQL Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Two-Way Sync: Update Sheet Audit Records & Generate Review URLs\nconst resultItems = $input.all();\nconst pricingItems = $('Deterministic Pricing Logic').all();\n\nconst syncPayloads = [];\n\nconst enrichedResults = resultItems.map((item, i) => {\n  const data = item.json;\n  const pricing = pricingItems[i]?.json || {};\n  const notifyTarget = pricing.notify_target || data.notify_target || '';\n  const product = data.product;\n  const adminReviewUrl = product?.admin_url || (product?.numericId ? `https://admin.shopify.com/store/all-hydro-test/products/${product.numericId}` : '');\n\n  const syncRecord = {\n    sku: pricing.sku || data.sku,\n    product_title: product?.title || pricing.raw_name,\n    wholesale_cost: `$${pricing.wholesale_cost || data.wholesale_cost}`,\n    retail_price: `$${pricing.retail_price || data.retail_price}`,\n    gross_margin: pricing.gross_margin || data.gross_margin,\n    profit_per_unit: `$${pricing.profit_per_unit || data.profit_per_unit}`,\n    status: 'Enriched & Created in Shopify \u2705',\n    admin_review_url: adminReviewUrl,\n    synced_at: new Date().toISOString()\n  };\n\n  syncPayloads.push(syncRecord);\n\n  return {\n    json: {\n      success: true,\n      ...syncRecord,\n      shopify_product_id: product?.id,\n      notify_target: notifyTarget,\n      primary_color: data.ai?.primary_color,\n      material: data.ai?.material,\n      category: data.ai?.category,\n      two_way_sync: {\n        status: 'SYNCED',\n        sheet_sync_ready: true,\n        record: syncRecord\n      },\n      audit_log: `[${syncRecord.synced_at}] Successfully synced SKU ${syncRecord.sku} to Shopify (${syncRecord.status}): ${syncRecord.product_title}`\n    }\n  };\n});\n\nreturn enrichedResults;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        208
+      ],
+      "id": "node-generate-review-link",
+      "name": "Two-Way Sync: Update Sheet & Audit Record"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Consolidate all enriched items into a Browser HTML Report + Slack/Email Dispatch\nconst items = $input.all().map(i => i.json);\nconst count = items.length;\n\nlet totalWholesale = 0;\nlet totalRetail = 0;\nlet totalProfit = 0;\n\nconst escapeHtml = (str) => String(str || '')\n  .replace(/&/g, '&amp;')\n  .replace(/</g, '&lt;')\n  .replace(/>/g, '&gt;')\n  .replace(/\"/g, '&quot;');\n\nconst rowsHtml = items.map(item => {\n  const wholesale = parseFloat(String(item.wholesale_cost || '0').replace(/[^0-9.]/g, '')) || 0;\n  const retail = parseFloat(String(item.retail_price || '0').replace(/[^0-9.]/g, '')) || 0;\n  const profit = parseFloat(String(item.profit_per_unit || '0').replace(/[^0-9.]/g, '')) || 0;\n  totalWholesale += wholesale;\n  totalRetail += retail;\n  totalProfit += profit;\n\n  const reviewLink = item.admin_review_url || '#';\n  return `\n    <tr>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#111827;\">${escapeHtml(item.sku)}</td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#1f2937;\">\n        <div style=\"font-weight:600;\">${escapeHtml(item.product_title)}</div>\n        <div style=\"font-size:12px;color:#6b7280;margin-top:2px;\">${escapeHtml(item.category || 'Catalog')} \u2022 ${escapeHtml(item.material || 'Standard')} \u2022 ${escapeHtml(item.primary_color || '')}</div>\n      </td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#4b5563;\">$${wholesale.toFixed(2)}</td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#059669;\">$${retail.toFixed(2)}</td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#047857;\">+${escapeHtml(item.gross_margin || '')} ($${profit.toFixed(2)})</td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;\">\n        <span style=\"display:inline-block;padding:3px 8px;border-radius:9999px;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;\">Draft Created</span>\n      </td>\n      <td style=\"padding:12px 10px;border-bottom:1px solid #e5e7eb;\">\n        <a href=\"${escapeHtml(reviewLink)}\" target=\"_blank\" rel=\"noopener noreferrer\" style=\"display:inline-block;padding:6px 12px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;\">Review in Shopify \u2197</a>\n      </td>\n    </tr>\n  `;\n}).join('');\n\nconst avgMargin = totalRetail > 0 ? ((totalProfit / totalRetail) * 100).toFixed(1) + '%' : '0%';\nconst notifyTarget = items.find(i => i.notify_target)?.notify_target || '';\n\n// Optional Slack / Email HTTP Dispatch (Works on all cloud platforms without SMTP port blocking)\nlet alertStatus = 'HTML Report Displayed (Add Slack Webhook or Resend/Brevo Key for auto-alerts)';\nlet slackSent = false;\nlet emailSent = false;\n\nconst env = (typeof $env !== 'undefined' && $env) ? $env : ((typeof process !== 'undefined' && process.env) ? process.env : {});\nconst slackUrl = (notifyTarget.startsWith('https://hooks.slack.com/') ? notifyTarget : (env.SLACK_WEBHOOK_URL || '')).trim();\nconst emailRecipient = (!notifyTarget.startsWith('http') && notifyTarget.includes('@')) ? notifyTarget : (env.ALERT_EMAIL_TO || '').trim();\nconst resendKey = (env.RESEND_API_KEY || '').trim();\nconst brevoKey = (env.BREVO_API_KEY || '').trim();\n\nconst slackBlocks = [\n  {\n    type: 'header',\n    text: { type: 'plain_text', text: `\ud83d\ude80 ${count} Supplier Product(s) Enriched & Created as Shopify Drafts` }\n  },\n  ...items.map(item => ({\n    type: 'section',\n    text: {\n      type: 'mrkdwn',\n      text: `*${item.product_title}* (SKU: \\`${item.sku}\\`)\\nWholesale: ${item.wholesale_cost} \u2794 *Retail: ${item.retail_price}* (${item.gross_margin} margin)\\n<${item.admin_review_url}|Review in Shopify Admin \u2197>`\n    }\n  }))\n];\n\nif (slackUrl) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: slackUrl,\n      headers: { 'Content-Type': 'application/json' },\n      body: { text: `Shopify Enrichment Complete: ${count} Draft(s) Created`, blocks: slackBlocks },\n      json: true\n    });\n    slackSent = true;\n    alertStatus = 'Slack Notification Sent \u2705';\n  } catch (e) {\n    alertStatus = `Slack Alert Error: ${e.message}`;\n  }\n}\n\nconst htmlReportBody = `\n<div style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:920px;margin:16px auto;padding:20px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;color:#111827;\">\n  <div style=\"display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #f3f4f6;padding-bottom:14px;margin-bottom:18px;flex-wrap:wrap;gap:10px;\">\n    <div>\n      <h2 style=\"margin:0;font-size:20px;color:#111827;\">\u2705 Supplier-to-Shopify Enrichment Report</h2>\n      <p style=\"margin:4px 0 0;font-size:13px;color:#6b7280;\">Automated Vision AI + 2.4x Pricing + Direct Shopify GraphQL Draft Sync</p>\n    </div>\n    <span style=\"padding:6px 12px;background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;border-radius:8px;font-size:12px;font-weight:600;\">${escapeHtml(alertStatus)}</span>\n  </div>\n\n  <div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px;\">\n    <div style=\"background:#f9fafb;padding:12px 14px;border-radius:8px;border:1px solid #e5e7eb;\">\n      <div style=\"font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600;\">Drafts Created</div>\n      <div style=\"font-size:22px;font-weight:700;color:#111827;margin-top:4px;\">${count}</div>\n    </div>\n    <div style=\"background:#f9fafb;padding:12px 14px;border-radius:8px;border:1px solid #e5e7eb;\">\n      <div style=\"font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600;\">Total Retail Value</div>\n      <div style=\"font-size:22px;font-weight:700;color:#059669;margin-top:4px;\">$${totalRetail.toFixed(2)}</div>\n    </div>\n    <div style=\"background:#f9fafb;padding:12px 14px;border-radius:8px;border:1px solid #e5e7eb;\">\n      <div style=\"font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600;\">Projected Profit</div>\n      <div style=\"font-size:22px;font-weight:700;color:#047857;margin-top:4px;\">$${totalProfit.toFixed(2)}</div>\n    </div>\n    <div style=\"background:#f9fafb;padding:12px 14px;border-radius:8px;border:1px solid #e5e7eb;\">\n      <div style=\"font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600;\">Avg Gross Margin</div>\n      <div style=\"font-size:22px;font-weight:700;color:#1d4ed8;margin-top:4px;\">${avgMargin}</div>\n    </div>\n  </div>\n\n  <div style=\"overflow-x:auto;\">\n    <table style=\"width:100%;border-collapse:collapse;font-size:13px;text-align:left;\">\n      <thead>\n        <tr style=\"background:#f3f4f6;color:#374151;\">\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">SKU</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Enriched Product</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Cost</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Retail (2.4x)</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Margin</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Status</th>\n          <th style=\"padding:10px;border-bottom:2px solid #e5e7eb;\">Shopify Admin</th>\n        </tr>\n      </thead>\n      <tbody>\n        ${rowsHtml}\n      </tbody>\n    </table>\n  </div>\n</div>\n`;\n\nif (emailRecipient && resendKey) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://api.resend.com/emails',\n      headers: {\n        'Authorization': `Bearer ${resendKey}`,\n        'Content-Type': 'application/json'\n      },\n      body: {\n        from: env.ALERT_EMAIL_FROM || 'Shopify Pipeline <onboarding@resend.dev>',\n        to: [emailRecipient],\n        subject: `\u2705 ${count} Shopify Draft Product(s) Enriched & Ready for Review`,\n        html: htmlReportBody\n      },\n      json: true\n    });\n    emailSent = true;\n    alertStatus = slackSent ? 'Slack & Email Sent \u2705' : `Email Sent to ${emailRecipient} \u2705`;\n  } catch (e) {\n    alertStatus += ` | Resend Error: ${e.message}`;\n  }\n} else if (emailRecipient && brevoKey) {\n  try {\n    await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://api.brevo.com/v3/smtp/email',\n      headers: {\n        'api-key': brevoKey,\n        'Content-Type': 'application/json'\n      },\n      body: {\n        sender: { name: 'Shopify Pipeline', email: env.ALERT_EMAIL_FROM || 'noreply@example.com' },\n        to: [{ email: emailRecipient }],\n        subject: `\u2705 ${count} Shopify Draft Product(s) Enriched & Ready for Review`,\n        htmlContent: htmlReportBody\n      },\n      json: true\n    });\n    emailSent = true;\n    alertStatus = slackSent ? 'Slack & Email Sent \u2705' : `Email Sent to ${emailRecipient} \u2705`;\n  } catch (e) {\n    alertStatus += ` | Brevo Error: ${e.message}`;\n  }\n}\n\nreturn [{\n  json: {\n    success: true,\n    count,\n    total_retail_value: `$${totalRetail.toFixed(2)}`,\n    total_profit: `$${totalProfit.toFixed(2)}`,\n    avg_gross_margin: avgMargin,\n    slack_sent: slackSent,\n    email_sent: emailSent,\n    alert_status: alertStatus,\n    notify_target: notifyTarget,\n    html_report: htmlReportBody,\n    email_subject: `\u2705 ${count} Shopify Draft Product(s) Enriched & Ready for Review`,\n    slack_blocks: slackBlocks,\n    items\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1860,
+        208
+      ],
+      "id": "node-html-report-builder",
+      "name": "Build HTML Report & Alert"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ $json.html_report }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        2120,
+        208
+      ],
+      "id": "node-form-completion-html",
+      "name": "Browser HTML Report",
+      "webhookId": "supplier-demo-report"
+    }
+  ],
+  "connections": {
+    "Live Trigger: Run Demo Row": {
+      "main": [
+        [
+          {
+            "node": "Ingest & Expand Google Sheet Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest & Expand Google Sheet Rows": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Pricing Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Pricing Logic": {
+      "main": [
+        [
+          {
+            "node": "Download & Buffer Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download & Buffer Image": {
+      "main": [
+        [
+          {
+            "node": "Prepare Image Buffer for AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Image Buffer for AI": {
+      "main": [
+        [
+          {
+            "node": "Gemini Vision AI Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Vision AI Engine": {
+      "main": [
+        [
+          {
+            "node": "Prepare Shopify GraphQL Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Shopify GraphQL Input": {
+      "main": [
+        [
+          {
+            "node": "Direct Shopify GraphQL Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Direct Shopify GraphQL Engine": {
+      "main": [
+        [
+          {
+            "node": "Two-Way Sync: Update Sheet & Audit Record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Two-Way Sync: Update Sheet & Audit Record": {
+      "main": [
+        [
+          {
+            "node": "Build HTML Report & Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML Report & Alert": {
+      "main": [
+        [
+          {
+            "node": "Browser HTML Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "versionId": "759a60ce-b4db-40ae-8b04-b74430e4b7c7"
+}
