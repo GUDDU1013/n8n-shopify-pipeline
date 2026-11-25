@@ -620,7 +620,7 @@ async function createAndRunJob(payload) {
       let cursor = 0;
 
       const workers = Array.from({ length: concurrency }, async (_, wIdx) => {
-        if (wIdx > 0) await new Promise((r) => setTimeout(r, wIdx * 220));
+        await new Promise((r) => setTimeout(r, (wIdx + 1) * 180));
         while (cursor < rows.length) {
           const idx = cursor++;
           await processRow(job, idx, rows[idx], shopCredsPromise);
