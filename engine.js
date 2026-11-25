@@ -383,45 +383,133 @@ function buildEmailHtmlReport(items, alertStatus) {
 
       return `
       <tr>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#111827;">${escapeHtml(item.sku)}</td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#1f2937;">
-          <div style="font-weight:600;">${escapeHtml(item.product_title)}</div>
-          <div style="font-size:12px;color:#6b7280;margin-top:2px;">${escapeHtml(item.category || "Catalog")} • ${escapeHtml(item.material || "Standard")} • ${escapeHtml(item.primary_color || "")}</div>
+        <td valign="middle" style="padding:14px 12px;border-bottom:1px solid #e2e8f0;font-family:'Courier New',Courier,monospace;font-size:12px;font-weight:700;color:#0f172a;white-space:nowrap;">
+          <span style="display:inline-block;background-color:#f1f5f9;border:1px solid #e2e8f0;padding:4px 8px;border-radius:5px;">${escapeHtml(item.sku)}</span>
         </td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#4b5563;">$${wholesale.toFixed(2)}</td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;font-weight:700;color:#059669;">$${retail.toFixed(2)}</td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;color:#047857;">+${escapeHtml(item.gross_margin)} ($${profit.toFixed(2)})</td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;"><span style="display:inline-block;padding:3px 8px;border-radius:9999px;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;">Draft Created</span></td>
-        <td style="padding:12px 10px;border-bottom:1px solid #e5e7eb;"><a href="${escapeHtml(item.admin_review_url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:6px 12px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:600;">Review in Shopify ↗</a></td>
+        <td valign="middle" style="padding:14px 12px;border-bottom:1px solid #e2e8f0;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              ${item.thumbnail_url ? `<td width="48" valign="middle" style="padding-right:10px;"><img src="${escapeHtml(item.thumbnail_url)}" width="40" height="40" alt="" style="display:block;width:40px;height:40px;border-radius:6px;border:1px solid #e2e8f0;" /></td>` : ""}
+              <td valign="middle">
+                <div style="font-size:14px;font-weight:700;color:#0f172a;line-height:1.35;">${escapeHtml(item.product_title)}</div>
+                <div style="font-size:12px;color:#64748b;margin-top:3px;">${escapeHtml(item.category || "Catalog")} &bull; ${escapeHtml(item.material || "Standard")} &bull; ${escapeHtml(item.primary_color || "")}</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+        <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;white-space:nowrap;">$${wholesale.toFixed(2)}</td>
+        <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
+          <div style="font-size:14px;font-weight:700;color:#059669;">$${retail.toFixed(2)}</div>
+          ${item.compare_at_price ? `<div style="font-size:11px;color:#94a3b8;text-decoration:line-through;">$${escapeHtml(item.compare_at_price)}</div>` : ""}
+        </td>
+        <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:600;color:#047857;white-space:nowrap;">+${escapeHtml(item.gross_margin)}<div style="font-size:11px;color:#64748b;font-weight:400;">+$${profit.toFixed(2)} profit</div></td>
+        <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
+          <span style="display:inline-block;padding:4px 10px;border-radius:999px;background-color:#dcfce7;border:1px solid #bbf7d0;color:#166534;font-size:11px;font-weight:700;letter-spacing:0.02em;">Draft</span>
+        </td>
+        <td valign="middle" align="right" style="padding:14px 14px 14px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
+          <a href="${escapeHtml(item.admin_review_url)}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:8px 13px;background-color:#0f172a;color:#ffffff;text-decoration:none;border-radius:6px;font-size:12px;font-weight:700;">Review in Shopify &rarr;</a>
+        </td>
       </tr>`;
     })
     .join("");
 
   const avgMargin = totalRetail > 0 ? ((totalProfit / totalRetail) * 100).toFixed(1) + "%" : "0%";
-  return `
-<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:920px;margin:16px auto;padding:20px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;color:#111827;">
-  <div style="border-bottom:2px solid #f3f4f6;padding-bottom:14px;margin-bottom:18px;">
-    <h2 style="margin:0;font-size:20px;color:#111827;">✅ Webskitters Shopify Catalog Automation Report</h2>
-    <p style="margin:4px 0 0;font-size:13px;color:#6b7280;">Automated Gemini Vision AI + 2.4x Pricing + Direct Shopify GraphQL Draft Sync</p>
-  </div>
-  <div style="margin-bottom:18px;font-size:13px;color:#065f46;background:#ecfdf5;padding:10px 14px;border-radius:8px;border:1px solid #a7f3d0;">
-    <strong>Summary:</strong> ${count} Draft(s) Created • Total Retail: $${totalRetail.toFixed(2)} • Projected Profit: $${totalProfit.toFixed(2)} (${avgMargin} avg margin) • ${escapeHtml(alertStatus)}
-  </div>
-  <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
-    <thead>
-      <tr style="background:#f3f4f6;color:#374151;">
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">SKU</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Enriched Product</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Cost</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Retail (2.4x)</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Margin</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Status</th>
-        <th style="padding:10px;border-bottom:2px solid #e5e7eb;">Shopify Admin</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
+  const runDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /></head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f1f5f9;padding:28px 14px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="760" cellpadding="0" cellspacing="0" border="0" style="max-width:760px;width:100%;background-color:#ffffff;border:1px solid #cbd5e1;border-radius:12px;overflow:hidden;">
+          <!-- Solid Navy Header -->
+          <tr>
+            <td style="background-color:#0f172a;padding:24px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td valign="middle">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#93c5fd;margin-bottom:4px;">Webskitters Automation Suite</div>
+                    <h1 style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">Shopify Catalog Enrichment Report</h1>
+                    <div style="font-size:12.5px;color:#cbd5e1;margin-top:4px;">Gemini Vision AI &bull; 2.4x Margin Pricing &bull; ${escapeHtml(runDate)}</div>
+                  </td>
+                  <td valign="middle" align="right">
+                    <span style="display:inline-block;background-color:#059669;color:#ffffff;font-size:12px;font-weight:700;padding:7px 14px;border-radius:999px;">Ready for Review</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Solid Status Strip -->
+          <tr>
+            <td style="background-color:#ecfdf5;border-bottom:1px solid #a7f3d0;padding:12px 28px;font-size:13px;color:#065f46;font-weight:600;">
+              &#9989; ${count} product${count > 1 ? "s" : ""} enriched and saved in Shopify as <strong>Draft</strong> listings &bull; ${escapeHtml(alertStatus)}
+            </td>
+          </tr>
+
+          <!-- KPI Summary Row (Table-based for Gmail/Outlook compatibility) -->
+          <tr>
+            <td style="padding:22px 28px 10px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Shopify Status</div>
+                    <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:4px;">${count} Draft${count > 1 ? "s" : ""}</div>
+                  </td>
+                  <td width="1.3%"></td>
+                  <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Total Retail</div>
+                    <div style="font-size:20px;font-weight:800;color:#059669;margin-top:4px;">$${totalRetail.toFixed(2)}</div>
+                  </td>
+                  <td width="1.3%"></td>
+                  <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Est. Profit</div>
+                    <div style="font-size:20px;font-weight:800;color:#047857;margin-top:4px;">$${totalProfit.toFixed(2)}</div>
+                  </td>
+                  <td width="1.3%"></td>
+                  <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Avg Margin</div>
+                    <div style="font-size:20px;font-weight:800;color:#1d4ed8;margin-top:4px;">${avgMargin}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Product Table -->
+          <tr>
+            <td style="padding:14px 28px 24px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                <thead>
+                  <tr style="background-color:#f8fafc;">
+                    <th align="left" style="padding:11px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">SKU</th>
+                    <th align="left" style="padding:11px 12px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Product</th>
+                    <th align="left" style="padding:11px 10px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Cost</th>
+                    <th align="left" style="padding:11px 10px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Retail</th>
+                    <th align="left" style="padding:11px 10px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Margin</th>
+                    <th align="left" style="padding:11px 10px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Status</th>
+                    <th align="right" style="padding:11px 14px;border-bottom:2px solid #e2e8f0;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#475569;">Action</th>
+                  </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Solid Clean Footer -->
+          <tr>
+            <td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;padding:16px 28px;font-size:12px;color:#64748b;text-align:center;">
+              Webskitters &bull; Shopify Project Automation Tool &mdash; Listings are saved in <strong>Draft</strong> mode for safe review prior to publishing.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
   </table>
-</div>`;
+</body>
+</html>`;
 }
 
 async function sendNotifications(items, notifyTarget) {
@@ -552,7 +640,7 @@ async function processRow(job, index, row, shopCredsPromise) {
     updateState({
       status: "done",
       stage: "done",
-      stageLabel: "Draft Created",
+      stageLabel: "Draft",
       shopify_product_id: created.id,
       product_title: created.title,
       admin_review_url: created.admin_review_url,

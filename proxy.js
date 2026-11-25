@@ -145,11 +145,13 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, getPublicJobState(job));
   }
 
-  // Serve full-page Webskitters App UI on both "/" (when unauthenticated) and "/form/supplier-demo-form"
+  // Serve full-page Webskitters App UI on "/", "/form/supplier-demo-form", and n8n Editor's "/form-test/*"
   const cookie = req.headers.cookie || "";
   if (
     req.method === "GET" &&
-    (urlPath === "/form/supplier-demo-form" || (urlPath === "/" && !cookie.includes("n8n-auth=")))
+    (urlPath === "/form/supplier-demo-form" ||
+      urlPath.startsWith("/form-test/") ||
+      (urlPath === "/" && !cookie.includes("n8n-auth=")))
   ) {
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
