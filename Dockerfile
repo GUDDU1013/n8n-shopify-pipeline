@@ -1,4 +1,4 @@
-FROM docker.n8n.io/n8nio/n8n:2.35.7
+FROM ghcr.io/n8n-io/n8n:2.35.7
 
 USER root
 RUN mkdir -p /app /home/node/.n8n && chmod -R 777 /app /home/node/.n8n
