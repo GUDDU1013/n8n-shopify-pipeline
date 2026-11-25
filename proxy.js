@@ -1,54 +1,47 @@
+const fs = require("fs");
+const path = require("path");
 const http = require("http");
 const net = require("net");
+const { createAndRunJob, getJob, getPublicJobState } = require("./engine");
 
 const LISTEN_PORT = parseInt(process.env.PORT || "10000", 10);
 const N8N_PORT = parseInt(process.env.N8N_PORT || "5678", 10);
 const STARTED_AT = Date.now();
 
-const LANDING_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="robots" content="noindex, nofollow" />
-  <title>Catalog Sync Studio</title>
-  <style>
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f8fafc;color:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;}
-    .card{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:36px;max-width:520px;box-shadow:0 10px 25px rgba(15,23,42,.06);text-align:center;}
-    h1{margin:0 0 12px;font-size:24px;}
-    p{margin:0 0 24px;color:#475569;line-height:1.5;}
-    a.btn{display:inline-block;background:#0f172a;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:600;}
-    a.btn:hover{background:#1e293b;}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <h1>Catalog Sync Studio</h1>
-    <p>Automated supplier product enrichment and catalog synchronization workspace.</p>
-    <a class="btn" href="/form/supplier-demo-form">Open Enrichment Form</a>
-  </div>
-</body>
-</html>`;
+const UI_HTML = fs.readFileSync(path.join(__dirname, "ui.html"), "utf8");
 
-const WARMING_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="refresh" content="5" />
-  <meta name="robots" content="noindex, nofollow" />
-  <title>Catalog Sync Studio — Starting</title>
-  <style>
-    body{font-family:system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;}
-    .box{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 32px;text-align:center;max-width:440px;}
-  </style>
-</head>
-<body>
-  <div class="box">
-    <h2 style="margin:0 0 8px;">Starting Workspace...</h2>
-    <p style="margin:0;color:#475569;">Please wait a moment, this page refreshes automatically every 5 seconds.</p>
-  </div>
-</body>
-</html>`;
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > 1024 * 1024) {
+        req.destroy();
+        return reject(new Error("Payload too large"));
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => {
+      try {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (e) {
+        reject(new Error("Invalid JSON body"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res, status, data) {
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "X-Robots-Tag": "noindex, nofollow",
+  });
+  res.end(JSON.stringify(data));
+}
 
 function proxyToN8n(req, res) {
   const headers = { ...req.headers };
@@ -66,18 +59,13 @@ function proxyToN8n(req, res) {
   );
   upstream.on("error", () => {
     if (res.headersSent) return;
-    if (req.method === "GET" && Date.now() - STARTED_AT < 180000) {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
-      res.end(WARMING_HTML);
-    } else {
-      res.writeHead(502, { "Content-Type": "text/plain" });
-      res.end("Service temporarily unavailable");
-    }
+    res.writeHead(502, { "Content-Type": "text/plain" });
+    res.end("Upstream n8n warming up, please refresh in a moment.");
   });
   req.pipe(upstream);
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const urlPath = (req.url || "/").split("?")[0];
 
   if (urlPath === "/robots.txt") {
@@ -99,7 +87,7 @@ const server = http.createServer((req, res) => {
       if (res.headersSent) return;
       if (Date.now() - STARTED_AT < 180000 || err.code !== "ECONNREFUSED") {
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end('{"status":"warming"}');
+        res.end('{"status":"ok"}');
       } else {
         res.writeHead(503, { "Content-Type": "application/json" });
         res.end('{"status":"error"}');
@@ -108,15 +96,67 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Keep "/" as a neutral portal landing page unless user already has an authenticated n8n session
+  // Real-time Streaming Automation API endpoints
+  if (urlPath === "/api/jobs" && req.method === "POST") {
+    try {
+      const body = await readJsonBody(req);
+      const jobState = await createAndRunJob(body);
+      return sendJson(res, 201, jobState);
+    } catch (err) {
+      return sendJson(res, 400, { error: err.message });
+    }
+  }
+
+  const streamMatch = urlPath.match(/^\/api\/jobs\/([a-f0-9]+)\/stream$/);
+  if (streamMatch && req.method === "GET") {
+    const job = getJob(streamMatch[1]);
+    if (!job) return sendJson(res, 404, { error: "Job not found" });
+
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.write(`: connected\n\n`);
+    res.write(`event: snapshot\ndata: ${JSON.stringify(getPublicJobState(job))}\n\n`);
+
+    if (job.status === "completed" || job.status === "failed") {
+      res.write(`event: complete\ndata: ${JSON.stringify(getPublicJobState(job))}\n\n`);
+      return res.end();
+    }
+
+    job.subscribers.add(res);
+    const keepalive = setInterval(() => {
+      try { res.write(": ping\n\n"); } catch { clearInterval(keepalive); }
+    }, 5000);
+
+    req.on("close", () => {
+      clearInterval(keepalive);
+      job.subscribers.delete(res);
+    });
+    return;
+  }
+
+  const pollMatch = urlPath.match(/^\/api\/jobs\/([a-f0-9]+)$/);
+  if (pollMatch && req.method === "GET") {
+    const job = getJob(pollMatch[1]);
+    if (!job) return sendJson(res, 404, { error: "Job not found" });
+    return sendJson(res, 200, getPublicJobState(job));
+  }
+
+  // Serve full-page Webskitters App UI on both "/" (when unauthenticated) and "/form/supplier-demo-form"
   const cookie = req.headers.cookie || "";
-  if (urlPath === "/" && !cookie.includes("n8n-auth=")) {
+  if (
+    req.method === "GET" &&
+    (urlPath === "/form/supplier-demo-form" || (urlPath === "/" && !cookie.includes("n8n-auth=")))
+  ) {
     res.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
       "X-Robots-Tag": "noindex, nofollow",
       "Cache-Control": "no-store",
     });
-    return res.end(LANDING_HTML);
+    return res.end(UI_HTML);
   }
 
   proxyToN8n(req, res);
@@ -137,5 +177,5 @@ server.on("upgrade", (req, clientSocket, head) => {
 });
 
 server.listen(LISTEN_PORT, "0.0.0.0", () => {
-  console.log(`[Proxy] Listening on 0.0.0.0:${LISTEN_PORT} -> 127.0.0.1:${N8N_PORT}`);
+  console.log(`[Proxy] Webskitters Automation UI + n8n Proxy listening on 0.0.0.0:${LISTEN_PORT}`);
 });

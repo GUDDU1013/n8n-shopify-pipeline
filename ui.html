@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Webskitters · Shopify Catalog Automation Tool</title>
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --surface: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --brand: #2563eb;
+      --brand-dark: #1d4ed8;
+      --accent: #059669;
+      --indigo: #4f46e5;
+      --amber: #d97706;
+      --danger: #dc2626;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      background: radial-gradient(circle at top right, #e0e7ff 0%, #f1f5f9 45%, #f8fafc 100%);
+      color: var(--ink);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    /* Top Navigation Bar */
+    .topbar {
+      background: linear-gradient(90deg, #0f172a 0%, #1e293b 65%, #1e1b4b 100%);
+      color: #fff;
+      padding: 14px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 4px 20px rgba(15, 23, 42, 0.14);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-logo {
+      width: 42px;
+      height: 42px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
+      flex-shrink: 0;
+    }
+    .brand-title { font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; }
+    .brand-sub { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+    .status-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(16, 185, 129, 0.14);
+      border: 1px solid rgba(52, 211, 153, 0.32);
+      color: #6ee7b7;
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #34d399;
+      box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+      animation: pulseRing 1.8s infinite;
+    }
+    @keyframes pulseRing {
+      0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+      70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+    }
+
+    /* Main Container */
+    .container {
+      width: 100%;
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 26px 28px 48px;
+      flex: 1;
+    }
+
+    /* Pipeline Banner Graphic */
+    .hero-banner {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+      display: grid;
+      grid-template-columns: 1.2fr 1.8fr;
+      gap: 24px;
+      align-items: center;
+      box-shadow: 0 6px 24px rgba(15, 23, 42, 0.04);
+    }
+    @media (max-width: 960px) {
+      .hero-banner { grid-template-columns: 1fr; }
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--indigo);
+      background: #eef2ff;
+      padding: 5px 11px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+    }
+    .hero-banner h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    .hero-banner p {
+      margin: 0;
+      font-size: 14px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* Visual Architecture Graphic Steps */
+    .flow-diagram {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 720px) {
+      .flow-diagram { grid-template-columns: repeat(2, 1fr); }
+    }
+    .flow-step {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      position: relative;
+      transition: transform .15s ease, border-color .15s ease;
+    }
+    .flow-step:hover { transform: translateY(-2px); border-color: #cbd5e1; }
+    .flow-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+    .flow-step h4 { margin: 0 0 3px; font-size: 13px; font-weight: 700; color: var(--ink); }
+    .flow-step span { font-size: 11.5px; color: var(--muted); line-height: 1.35; display: block; }
+
+    /* Form Grid Layout */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 22px;
+      align-items: stretch;
+    }
+    @media (max-width: 900px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: 0 6px 22px rgba(15, 23, 42, 0.04);
+      display: flex;
+      flex-direction: column;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .card-title-wrap { display: flex; align-items: center; gap: 11px; }
+    .card-title-wrap h2 { margin: 0; font-size: 16px; font-weight: 700; }
+    .card-title-wrap p { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); }
+    .pill-btn {
+      border: 1px solid #cbd5e1;
+      background: #f8fafc;
+      color: #334155;
+      border-radius: 8px;
+      padding: 6px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s ease;
+      white-space: nowrap;
+    }
+    .pill-btn:hover { background: #eef2ff; border-color: #818cf8; color: var(--indigo); }
+
+    .field { margin-bottom: 15px; }
+    .field:last-child { margin-bottom: 0; }
+    .field label {
+      display: block;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+    .field input {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      font-size: 14px;
+      color: var(--ink);
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+    }
+    .field input:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .field-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 560px) { .field-row-2 { grid-template-columns: 1fr; } }
+
+    .helper-box {
+      margin-top: auto;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 12.5px;
+      color: #475569;
+      line-height: 1.5;
+    }
+
+    /* Full-width Submit & Notification Card */
+    .dispatch-bar {
+      margin-top: 22px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px 24px;
+      box-shadow: 0 6px 22px rgba(15, 23, 42, 0.04);
+      display: grid;
+      grid-template-columns: 1.7fr 1fr;
+      gap: 18px;
+      align-items: end;
+    }
+    @media (max-width: 820px) { .dispatch-bar { grid-template-columns: 1fr; } }
+
+    .submit-btn {
+      width: 100%;
+      border: none;
+      border-radius: 12px;
+      padding: 14px 22px;
+      background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+      transition: transform .15s, box-shadow .15s, opacity .15s;
+    }
+    .submit-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(37, 99, 235, 0.36); }
+    .submit-btn:disabled { opacity: 0.72; cursor: wait; }
+
+    /* Live Progress Workspace */
+    .workspace { display: none; }
+    .workspace.active { display: block; animation: fadeUp .25s ease; }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .progress-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px 28px;
+      margin-bottom: 22px;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+    }
+    .progress-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .loader-heading {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .dual-spinner {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 3.5px solid #e2e8f0;
+      border-top-color: var(--brand);
+      border-right-color: var(--indigo);
+      animation: spin 0.85s linear infinite;
+      flex-shrink: 0;
+    }
+    .done-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #d1fae5;
+      color: #059669;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .counter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 15px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 16px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2563eb, #6366f1, #10b981);
+      background-size: 200% 100%;
+      transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+    }
+    .progress-fill.running::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    /* Live KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-top: 18px;
+    }
+    @media (max-width: 780px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    .kpi {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+    }
+    .kpi-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .kpi-val { font-size: 21px; font-weight: 800; margin-top: 4px; color: var(--ink); }
+
+    /* Live Table */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 8px 28px rgba(15, 23, 42, 0.05);
+    }
+    .table-head-bar {
+      padding: 16px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      background: #f8fafc;
+    }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13.5px; }
+    thead th {
+      padding: 12px 16px;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #475569;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr.row-done { background: #fcfffd; }
+
+    .prod-cell { display: flex; align-items: center; gap: 12px; }
+    .thumb {
+      width: 46px;
+      height: 46px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .sku-tag {
+      display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      font-weight: 700;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-processing { background: #dbeafe; color: #1e40af; }
+    .badge-shopify { background: #e0e7ff; color: #3730a3; }
+    .badge-done { background: #d1fae5; color: #065f46; }
+    .badge-error { background: #fee2e2; color: #991b1b; }
+
+    .mini-spin {
+      width: 12px;
+      height: 12px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    .review-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 13px;
+      border-radius: 8px;
+      background: #0f172a;
+      color: #fff;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .review-btn:hover { background: #1e293b; }
+    .waiting-chip {
+      display: inline-block;
+      padding: 6px 11px;
+      border-radius: 8px;
+      background: #f1f5f9;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .alert-banner {
+      display: none;
+      margin-top: 18px;
+      padding: 15px 20px;
+      border-radius: 14px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      font-size: 13.5px;
+      font-weight: 600;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .error-banner {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo" aria-hidden="true">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-title">Webskitters · Shopify Catalog Automation Tool</div>
+        <div class="brand-sub">AI Vision Merchandising · 2.4x Margin Pricing · Live GraphQL Sync</div>
+      </div>
+    </div>
+    <div class="status-chip">
+      <span class="pulse-dot"></span>
+      <span>Live Production Pipeline Connected</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Hero Banner with Architecture Graphics -->
+    <section class="hero-banner">
+      <div>
+        <div class="hero-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+          Webskitters Enterprise AI Suite
+        </div>
+        <h1>Automated Supplier-to-Shopify Enrichment</h1>
+        <p>Import raw supplier spreadsheets or single SKUs. Watch each row progress live through Gemini Vision AI analysis, 2.4x deterministic pricing, and Shopify Draft creation.</p>
+      </div>
+      <div class="flow-diagram">
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#dbeafe;color:#1d4ed8;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+          </div>
+          <h4>1. Sheet Ingest</h4>
+          <span>Reads all CSV rows &amp; computes profit</span>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#ede9fe;color:#6d28d9;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <h4>2. Gemini Vision</h4>
+          <span>Writes SEO title, tags &amp; rich HTML</span>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#d1fae5;color:#047857;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+          </div>
+          <h4>3. Shopify Draft</h4>
+          <span>Uploads HD media, SKU &amp; pricing</span>
+        </div>
+        <div class="flow-step">
+          <div class="flow-icon" style="background:#fef3c7;color:#b45309;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+          </div>
+          <h4>4. Email Dispatch</h4>
+          <span>Delivers full HTML review report</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Intake Form View -->
+    <form id="intakeForm">
+      <div class="form-grid">
+        <!-- Left Card: Google Sheet Batch -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-wrap">
+              <div class="flow-icon" style="background:#ecfdf5;color:#059669;margin:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>
+              </div>
+              <div>
+                <h2>Bulk Google Sheet Import</h2>
+                <p>Recommended for multi-product supplier catalogs</p>
+              </div>
+            </div>
+            <button type="button" class="pill-btn" id="loadSampleBtn">Load Sample Sheet</button>
+          </div>
+
+          <div class="field">
+            <label for="sheetUrl">Google Sheet URL (Optional)</label>
+            <input id="sheetUrl" name="sheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/1vI8FDCWQ54m2OiiQnJPltGVwEUJbZul-TeTvw8fw1kk/edit?usp=sharing" />
+          </div>
+
+          <div class="helper-box">
+            <strong>Sheet Format Tips:</strong><br/>
+            Columns in order: <code>SKU</code>, <code>Item Name</code>, <code>Wholesale Cost</code>, <code>Image URL</code>.<br/>
+            Ensure sharing is set to <em>&ldquo;Anyone with the link can view&rdquo;</em>. All rows load instantly and process concurrently with live progress tracking.
+          </div>
+        </div>
+
+        <!-- Right Card: Single SKU -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title-wrap">
+              <div class="flow-icon" style="background:#eff6ff;color:#2563eb;margin:0;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              </div>
+              <div>
+                <h2>Or Single Product Quick Test</h2>
+                <p>Used when Google Sheet URL is left empty</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-row-2">
+            <div class="field">
+              <label for="sku">Supplier SKU</label>
+              <input id="sku" name="sku" type="text" placeholder="BAG001" />
+            </div>
+            <div class="field">
+              <label for="wholesaleCost">Wholesale Cost ($)</label>
+              <input id="wholesaleCost" name="wholesaleCost" type="number" step="0.01" placeholder="35.00" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="rawName">Raw Item Name</label>
+            <input id="rawName" name="rawName" type="text" placeholder="Vintage Leather Commuter Backpack" />
+          </div>
+
+          <div class="field">
+            <label for="imageUrl">Raw Product Image URL</label>
+            <input id="imageUrl" name="imageUrl" type="url" placeholder="https://images.unsplash.com/photo-1553062407-98eeb64c6a62" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Full-width Dispatch Bar -->
+      <div class="dispatch-bar">
+        <div class="field" style="margin:0;">
+          <label for="notifyTarget">Notification Email or Slack Webhook (Optional)</label>
+          <input id="notifyTarget" name="notifyTarget" type="text" placeholder="client@brand.com or https://hooks.slack.com/services/..." />
+        </div>
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          <span>Run AI Enrichment &amp; Shopify Sync</span>
+        </button>
+      </div>
+      <div class="error-banner" id="formError"></div>
+    </form>
+
+    <!-- Live Row-by-Row Progress Workspace -->
+    <section class="workspace" id="workspace">
+      <div class="progress-card">
+        <div class="progress-top">
+          <div class="loader-heading">
+            <div class="dual-spinner" id="masterSpinner"></div>
+            <div class="done-icon" id="masterDoneIcon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <div>
+              <h2 id="progressTitle" style="margin:0;font-size:19px;">Analyzing Supplier Sheet &amp; Queuing Products...</h2>
+              <p id="progressSub" style="margin:4px 0 0;font-size:13px;color:var(--muted);">Running Gemini Vision AI &amp; Direct Shopify GraphQL in parallel</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div class="counter-pill">
+              <span id="counterFraction">0 / 0</span>
+              <span style="color:var(--muted);font-weight:600;font-size:13px;" id="elapsedLabel">0.0s</span>
+            </div>
+            <button type="button" class="pill-btn" id="newRunBtn" style="display:none;padding:9px 14px;">+ New Batch</button>
+          </div>
+        </div>
+
+        <div class="progress-track">
+          <div class="progress-fill running" id="progressBar"></div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi">
+            <div class="kpi-label">Progress</div>
+            <div class="kpi-val" id="kpiPct" style="color:var(--brand);">0%</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Drafts Ready</div>
+            <div class="kpi-val" id="kpiDone">0 / 0</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Enriched Retail Value</div>
+            <div class="kpi-val" id="kpiRetail" style="color:var(--accent);">$0.00</div>
+          </div>
+          <div class="kpi">
+            <div class="kpi-label">Projected Profit</div>
+            <div class="kpi-val" id="kpiProfit" style="color:#047857;">$0.00</div>
+          </div>
+        </div>
+
+        <div class="alert-banner" id="alertBanner">
+          <span id="alertBannerText"></span>
+          <span id="alertDurationBadge" style="font-size:12px;background:#fff;padding:4px 10px;border-radius:999px;border:1px solid #a7f3d0;"></span>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-head-bar">
+          <div>
+            <strong style="font-size:15px;">Live Product Queue &amp; Enrichment Status</strong>
+            <span style="font-size:12.5px;color:var(--muted);margin-left:8px;" id="queueHint">Each row updates automatically from Pending → Done</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Product Details</th>
+                <th>Wholesale</th>
+                <th>Retail (2.4x)</th>
+                <th>Margin</th>
+                <th>Live Status</th>
+                <th>Shopify Admin</th>
+              </tr>
+            </thead>
+            <tbody id="rowsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Webskitters Shopify Project Automation Tool · Powered by Gemini Vision AI &amp; Shopify Admin GraphQL</footer>
+
+  <script>
+    const SAMPLE_SHEET = "https://docs.google.com/spreadsheets/d/1vI8FDCWQ54m2OiiQnJPltGVwEUJbZul-TeTvw8fw1kk/edit?usp=sharing";
+    const intakeForm = document.getElementById("intakeForm");
+    const workspace = document.getElementById("workspace");
+    const submitBtn = document.getElementById("submitBtn");
+    const formError = document.getElementById("formError");
+    const rowsBody = document.getElementById("rowsBody");
+    const progressBar = document.getElementById("progressBar");
+    const progressTitle = document.getElementById("progressTitle");
+    const progressSub = document.getElementById("progressSub");
+    const counterFraction = document.getElementById("counterFraction");
+    const elapsedLabel = document.getElementById("elapsedLabel");
+    const kpiPct = document.getElementById("kpiPct");
+    const kpiDone = document.getElementById("kpiDone");
+    const kpiRetail = document.getElementById("kpiRetail");
+    const kpiProfit = document.getElementById("kpiProfit");
+    const masterSpinner = document.getElementById("masterSpinner");
+    const masterDoneIcon = document.getElementById("masterDoneIcon");
+    const alertBanner = document.getElementById("alertBanner");
+    const alertBannerText = document.getElementById("alertBannerText");
+    const alertDurationBadge = document.getElementById("alertDurationBadge");
+    const newRunBtn = document.getElementById("newRunBtn");
+
+    let activeEventSource = null;
+    let pollTimer = null;
+    let elapsedTimer = null;
+    let startedAt = 0;
+    let rowCache = {};
+
+    document.getElementById("loadSampleBtn").addEventListener("click", () => {
+      document.getElementById("sheetUrl").value = SAMPLE_SHEET;
+      document.getElementById("sheetUrl").focus();
+    });
+
+    newRunBtn.addEventListener("click", () => {
+      if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+      workspace.classList.remove("active");
+      intakeForm.style.display = "block";
+      submitBtn.disabled = false;
+      submitBtn.querySelector("span").textContent = "Run AI Enrichment & Shopify Sync";
+    });
+
+    function esc(s) {
+      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+    }
+
+    function statusBadgeHtml(row) {
+      if (row.status === "done") {
+        return `<span class="badge badge-done">✅ Done</span>`;
+      }
+      if (row.status === "error") {
+        return `<span class="badge badge-error" title="${esc(row.error)}">❌ Error</span>`;
+      }
+      if (row.stage === "shopify") {
+        return `<span class="badge badge-shopify"><span class="mini-spin"></span>Creating Draft</span>`;
+      }
+      if (row.status === "processing" || row.stage === "ai") {
+        return `<span class="badge badge-processing"><span class="mini-spin"></span>AI Enriching</span>`;
+      }
+      return `<span class="badge badge-pending">⏳ Pending</span>`;
+    }
+
+    function renderRow(row) {
+      let tr = document.getElementById(`row-${row.index}`);
+      if (!tr) {
+        tr = document.createElement("tr");
+        tr.id = `row-${row.index}`;
+        rowsBody.appendChild(tr);
+      }
+      tr.className = row.status === "done" ? "row-done" : "";
+      const meta = row.category ? `${esc(row.category)} • ${esc(row.material)} • ${esc(row.primary_color)}` : (row.stageLabel || "Queued for processing");
+      const thumb = row.thumbnail_url ? `<img class="thumb" src="${esc(row.thumbnail_url)}" alt="" />` : `<div class="thumb"></div>`;
+      const action = row.admin_review_url
+        ? `<a class="review-btn" href="${esc(row.admin_review_url)}" target="_blank" rel="noopener noreferrer">Review in Shopify ↗</a>`
+        : `<span class="waiting-chip">${row.status === "error" ? "Skipped" : "Waiting..."}</span>`;
+
+      tr.innerHTML = `
+        <td><span class="sku-tag">${esc(row.sku)}</span></td>
+        <td>
+          <div class="prod-cell">
+            ${thumb}
+            <div>
+              <div style="font-weight:700;color:#0f172a;">${esc(row.product_title || row.raw_name)}</div>
+              <div style="font-size:12px;color:#64748b;margin-top:2px;">${meta}</div>
+            </div>
+          </div>
+        </td>
+        <td>$${Number(row.wholesale_cost || 0).toFixed(2)}</td>
+        <td>
+          <span style="font-weight:700;color:#059669;">$${esc(row.retail_price)}</span>
+          <div style="font-size:11px;color:#94a3b8;text-decoration:line-through;">$${esc(row.compare_at_price)}</div>
+        </td>
+        <td style="color:#047857;font-weight:600;">+${esc(row.gross_margin)}</td>
+        <td>${statusBadgeHtml(row)}</td>
+        <td>${action}</td>
+      `;
+    }
+
+    function updateSummary(job) {
+      const total = job.total || 0;
+      const doneCount = job.completed || 0;
+      const finishedCount = doneCount + (job.failed || 0);
+      const pct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
+
+      progressBar.style.width = `${pct}%`;
+      counterFraction.textContent = `${doneCount} / ${total}`;
+      kpiPct.textContent = `${pct}%`;
+      kpiDone.textContent = `${doneCount} / ${total}`;
+
+      let retailSum = 0;
+      let profitSum = 0;
+      (job.rows || []).forEach((r) => {
+        if (r.status === "done") {
+          retailSum += parseFloat(r.retail_price) || 0;
+          profitSum += parseFloat(r.profit_per_unit) || 0;
+        }
+      });
+      kpiRetail.textContent = `$${retailSum.toFixed(2)}`;
+      kpiProfit.textContent = `$${profitSum.toFixed(2)}`;
+
+      if (job.status === "completed" || job.status === "failed") {
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+
+        progressBar.classList.remove("running");
+        masterSpinner.style.display = "none";
+        masterDoneIcon.style.display = "flex";
+        newRunBtn.style.display = "inline-block";
+
+        const sec = ((job.durationMs || (Date.now() - startedAt)) / 1000).toFixed(1);
+        elapsedLabel.textContent = `${sec}s`;
+        progressTitle.textContent = `Batch Complete: ${doneCount} of ${total} Shopify Drafts Created`;
+        progressSub.textContent = job.alertStatus || "All queued supplier rows finished processing.";
+
+        alertBanner.style.display = "flex";
+        alertBannerText.textContent = `✅ ${doneCount}/${total} Done · ${job.alertStatus || "Ready for Shopify Review"}`;
+        alertDurationBadge.textContent = `Completed in ${sec}s`;
+      }
+    }
+
+    function applyFullSnapshot(job) {
+      (job.rows || []).forEach((r) => {
+        rowCache[r.index] = r;
+        renderRow(r);
+      });
+      updateSummary({ ...job, rows: Object.values(rowCache) });
+    }
+
+    intakeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      formError.style.display = "none";
+      submitBtn.disabled = true;
+      submitBtn.querySelector("span").textContent = "Loading Sheet & Preparing Queue...";
+
+      const payload = {
+        sheetUrl: document.getElementById("sheetUrl").value.trim(),
+        sku: document.getElementById("sku").value.trim(),
+        rawName: document.getElementById("rawName").value.trim(),
+        wholesaleCost: document.getElementById("wholesaleCost").value.trim(),
+        imageUrl: document.getElementById("imageUrl").value.trim(),
+        notifyTarget: document.getElementById("notifyTarget").value.trim(),
+      };
+
+      try {
+        const res = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Failed to start automation job");
+
+        // Switch immediately to Live Progress Workspace with all rows Pending
+        intakeForm.style.display = "none";
+        rowsBody.innerHTML = "";
+        rowCache = {};
+        alertBanner.style.display = "none";
+        newRunBtn.style.display = "none";
+        masterSpinner.style.display = "block";
+        masterDoneIcon.style.display = "none";
+        progressBar.classList.add("running");
+        progressTitle.textContent = `Processing ${data.total} Supplier Product${data.total > 1 ? "s" : ""}...`;
+        progressSub.textContent = "Step-by-step live updates: Pending → AI Enriching → Creating Draft → Done";
+        workspace.classList.add("active");
+
+        startedAt = Date.now();
+        elapsedTimer = setInterval(() => {
+          elapsedLabel.textContent = `${((Date.now() - startedAt) / 1000).toFixed(1)}s`;
+        }, 100);
+
+        applyFullSnapshot(data);
+
+        // Primary: SSE real-time stream
+        const es = new EventSource(`/api/jobs/${data.id}/stream`);
+        activeEventSource = es;
+        es.addEventListener("snapshot", (ev) => applyFullSnapshot(JSON.parse(ev.data)));
+        es.addEventListener("row_update", (ev) => {
+          const msg = JSON.parse(ev.data);
+          rowCache[msg.index] = msg.row;
+          renderRow(msg.row);
+          updateSummary({
+            status: "running",
+            total: msg.total,
+            completed: msg.completed,
+            failed: msg.failed,
+            rows: Object.values(rowCache)
+          });
+        });
+        es.addEventListener("notifying", (ev) => {
+          const msg = JSON.parse(ev.data);
+          progressSub.textContent = msg.message || "Sending Email / Slack Report...";
+        });
+        es.addEventListener("complete", (ev) => applyFullSnapshot(JSON.parse(ev.data)));
+
+        // Automatic lightweight polling backup (guarantees real-time updates even if proxy buffers SSE)
+        pollTimer = setInterval(async () => {
+          try {
+            const pr = await fetch(`/api/jobs/${data.id}`);
+            if (pr.ok) {
+              const snap = await pr.json();
+              applyFullSnapshot(snap);
+            }
+          } catch {}
+        }, 900);
+      } catch (err) {
+        formError.textContent = err.message;
+        formError.style.display = "block";
+        submitBtn.disabled = false;
+        submitBtn.querySelector("span").textContent = "Run AI Enrichment & Shopify Sync";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -6,7 +6,9 @@ RUN mkdir -p /app/n8n-data /home/node/.n8n && chmod -R 777 /app /home/node/.n8n
 COPY workflow.json /app/workflow.json
 COPY entrypoint.sh /app/entrypoint.sh
 COPY proxy.js /app/proxy.js
-RUN chmod +x /app/entrypoint.sh && chmod 644 /app/workflow.json /app/proxy.js
+COPY engine.js /app/engine.js
+COPY ui.html /app/ui.html
+RUN chmod +x /app/entrypoint.sh && chmod 644 /app/workflow.json /app/proxy.js /app/engine.js /app/ui.html
 
 ENV HOME=/home/node \
     N8N_USER_FOLDER=/app/n8n-data \
