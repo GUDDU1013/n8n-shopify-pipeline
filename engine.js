@@ -193,27 +193,37 @@ function execFileAsync(cmd, args, timeout = 30000) {
   });
 }
 
+let resizeMutex = Promise.resolve();
+function withResizeLock(fn) {
+  const next = resizeMutex.then(fn, fn);
+  resizeMutex = next.catch(() => {});
+  return next;
+}
+
 async function resizeBufferWithVips(buf, maxDim, quality = 85) {
-  const tmpId = crypto.randomBytes(6).toString("hex");
-  const inPath = path.join(os.tmpdir(), `img-in-${tmpId}`);
-  const outPath = path.join(os.tmpdir(), `img-out-${tmpId}.jpg`);
-  const qv = quality >= 82 ? "3" : "6";
-  try {
-    fs.writeFileSync(inPath, buf);
+  return withResizeLock(async () => {
+    const tmpId = crypto.randomBytes(6).toString("hex");
+    const inPath = path.join(os.tmpdir(), `img-in-${tmpId}`);
+    const outPath = path.join(os.tmpdir(), `img-out-${tmpId}.jpg`);
+    const qv = quality >= 82 ? "3" : "6";
     try {
-      await execFileAsync("ffmpeg", [
-        "-y", "-v", "error", "-i", inPath, "-frames:v", "1",
-        "-vf", `scale='min(${maxDim},iw)':'min(${maxDim},ih)':force_original_aspect_ratio=decrease`,
-        "-q:v", qv, outPath,
-      ]);
-    } catch {
-      await execFileAsync("vipsthumbnail", [inPath, "--size", `${maxDim}x${maxDim}>`, "-o", `${outPath}[Q=${quality}]`]);
+      fs.writeFileSync(inPath, buf);
+      try {
+        await execFileAsync("ffmpeg", [
+          "-y", "-v", "error", "-threads", "1", "-filter_threads", "1",
+          "-i", inPath, "-frames:v", "1",
+          "-vf", `scale='min(${maxDim},iw)':'min(${maxDim},ih)':force_original_aspect_ratio=decrease`,
+          "-q:v", qv, outPath,
+        ]);
+      } catch {
+        await execFileAsync("vipsthumbnail", [inPath, "--size", `${maxDim}x${maxDim}>`, "-o", `${outPath}[Q=${quality}]`]);
+      }
+      return fs.readFileSync(outPath);
+    } finally {
+      try { fs.unlinkSync(inPath); } catch {}
+      try { fs.unlinkSync(outPath); } catch {}
     }
-    return fs.readFileSync(outPath);
-  } finally {
-    try { fs.unlinkSync(inPath); } catch {}
-    try { fs.unlinkSync(outPath); } catch {}
-  }
+  });
 }
 
 function requestUrl(targetUrl, opts = {}, redirectCount = 0) {
@@ -433,6 +443,7 @@ async function prepareAndOptimizeImage(row, onStageNotice) {
       });
       try {
         uploadBuffer = await resizeBufferWithVips(srcBuf, 2048, 85);
+        srcBuf = null;
         uploadMime = "image/jpeg";
         needsStagedUpload = true;
         info = parseImageDimensions(uploadBuffer);

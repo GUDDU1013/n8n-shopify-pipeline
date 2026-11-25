@@ -23,7 +23,7 @@ if [ ! -f /app/n8n-data/.n8n/database.sqlite ]; then
 fi
 
 # Lightweight gatekeeper proxy on $PORT -> 127.0.0.1:5678
-node /app/proxy.js &
+NODE_OPTIONS=--max-old-space-size=96 node /app/proxy.js &
 
 # Single non-overlapping owner setup after n8n internal healthz responds 200
 node -e '
