@@ -118,7 +118,7 @@ const server = http.createServer(async (req, res) => {
       Connection: "keep-alive",
       "X-Accel-Buffering": "no",
     });
-    res.write(`: connected\n\n`);
+    res.write(`: ${" ".repeat(2048)}\n\n`);
     res.write(`event: snapshot\ndata: ${JSON.stringify(getPublicJobState(job))}\n\n`);
 
     if (job.status === "completed" || job.status === "failed") {
