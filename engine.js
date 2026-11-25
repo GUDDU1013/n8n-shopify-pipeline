@@ -407,6 +407,44 @@ async function ingestRows(payload) {
   };
 }
 
+async function optimizeOversizedBuffer(targetUrl, srcBuf, info) {
+  // 1. Primary: Cloud libvips optimizer via wsrv.nl (uses 0MB container RAM, handles 20MP-100MP safely)
+  try {
+    const optUrl = `https://wsrv.nl/?url=${encodeURIComponent(targetUrl)}&w=2048&h=2048&fit=inside&output=jpg&q=85`;
+    const optRes = await requestUrl(optUrl, { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 20000 });
+    if (optRes.status < 400 && optRes.buffer && optRes.buffer.length > 500) {
+      const dim = parseImageDimensions(optRes.buffer);
+      if (dim.width > 0 && dim.megapixels <= SHOPIFY_MAX_MP) {
+        return optRes.buffer;
+      }
+    }
+  } catch (err) {
+    console.warn("[Engine] Cloud optimizer fallback:", err.message);
+  }
+
+  // 2. Local fallback: ffmpeg with lowres JPEG DCT downscale to stay safely inside 512MB RAM
+  const tmpId = crypto.randomBytes(6).toString("hex");
+  const inPath = path.join(os.tmpdir(), `img-in-${tmpId}`);
+  const outPath = path.join(os.tmpdir(), `img-out-${tmpId}.jpg`);
+  return withResizeLock(async () => {
+    try {
+      fs.writeFileSync(inPath, srcBuf);
+      const isJpeg = info?.mimeType === "image/jpeg";
+      const lowresArgs = isJpeg && (info.width > 3600 || info.height > 3600) ? ["-lowres", "2"] : [];
+      await execFileAsync("ffmpeg", [
+        "-y", "-v", "error", "-threads", "1", "-filter_threads", "1",
+        ...lowresArgs, "-i", inPath, "-frames:v", "1",
+        "-vf", "scale='min(2048,iw)':'min(2048,ih)':force_original_aspect_ratio=decrease",
+        "-q:v", "3", outPath,
+      ]);
+      return fs.readFileSync(outPath);
+    } finally {
+      try { fs.unlinkSync(inPath); } catch {}
+      try { fs.unlinkSync(outPath); } catch {}
+    }
+  });
+}
+
 async function prepareAndOptimizeImage(row, onStageNotice) {
   const targetUrl = row.safe_image_url || row.image_url;
   if (!targetUrl) return { aiBase64: "", aiMime: "image/jpeg", uploadBuffer: null, uploadMime: "image/jpeg", needsStagedUpload: false, imageUrl: "" };
@@ -442,7 +480,7 @@ async function prepareAndOptimizeImage(row, onStageNotice) {
         notice: `High-resolution ${mpText} image detected — optimizing down to ≤20MP before AI analysis & Shopify upload...`,
       });
       try {
-        uploadBuffer = await resizeBufferWithVips(srcBuf, 2048, 85);
+        uploadBuffer = await optimizeOversizedBuffer(targetUrl, srcBuf, info);
         srcBuf = null;
         uploadMime = "image/jpeg";
         needsStagedUpload = true;
@@ -457,7 +495,7 @@ async function prepareAndOptimizeImage(row, onStageNotice) {
   let aiBase64 = "";
   let aiMime = "image/jpeg";
   if (uploadBuffer) {
-    if (uploadBuffer.length > 450 * 1024 || info.width > 800 || info.height > 800) {
+    if (uploadBuffer.length > 750 * 1024) {
       try {
         const aiBuf = await resizeBufferWithVips(uploadBuffer, 512, 75);
         aiBase64 = aiBuf.toString("base64");
