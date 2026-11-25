@@ -28,6 +28,7 @@ const FALLBACK_FX = { USD: 1, INR: 92.5, EUR: 0.92, GBP: 0.79, CAD: 1.38, AUD: 1
 const fxCache = { rates: null, fetchedAt: 0 };
 
 const jobs = new Map();
+const modelCooldownUntil = new Map();
 const JOB_TTL_MS = 30 * 60 * 1000;
 const SHOPIFY_MAX_MP = 19.5;
 
@@ -572,23 +573,50 @@ Return ONE single valid JSON object (NOT an array, no markdown, no backticks) wi
     generationConfig: { response_mime_type: "application/json" },
   });
 
-  const models = ["gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash"];
-  for (const model of models) {
-    try {
-      const data = await fetchJson(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody, timeout: 16000 }
-      );
-      const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      if (rawText) {
-        const parsed = JSON.parse(rawText.replace(/```json/g, "").replace(/```/g, "").trim());
-        return (Array.isArray(parsed) ? parsed[0] : parsed) || {};
+  const allModels = [
+    "gemini-3-flash-preview",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3.7-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
+  ];
+
+  const extractJson = (rawText) => {
+    const cleaned = String(rawText || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : cleaned);
+    return (Array.isArray(parsed) ? parsed[0] : parsed) || {};
+  };
+
+  let lastErr = "";
+  for (let pass = 1; pass <= 2; pass++) {
+    const now = Date.now();
+    const candidates = allModels.filter((m) => (modelCooldownUntil.get(m) || 0) <= now);
+    const tryList = candidates.length > 0 ? candidates : allModels.slice(0, 3);
+    for (const model of tryList) {
+      try {
+        const data = await fetchJson(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: reqBody, timeout: 14000 }
+        );
+        const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        if (rawText) {
+          const obj = extractJson(rawText);
+          if (obj && obj.persuasive_title) return obj;
+        }
+      } catch (err) {
+        lastErr = err.message;
+        if (lastErr.includes("HTTP 429")) {
+          modelCooldownUntil.set(model, Date.now() + 10 * 60 * 1000);
+        }
+        console.warn(`[Engine] Gemini (${model}) failed for ${row.sku}:`, lastErr);
       }
-    } catch (err) {
-      console.warn(`[Engine] Gemini (${model}) failed for ${row.sku}:`, err.message);
     }
+    if (pass === 1) await new Promise((r) => setTimeout(r, 1500));
   }
-  return {};
+  throw new Error(`Gemini Vision AI unavailable across models (${lastErr.slice(0, 120) || "timeout"})`);
 }
 
 function buildShopifyPayload(row, ai, storeCurrency, fxRate) {
@@ -830,26 +858,19 @@ async function createShopifyDraft(shopCreds, data, imageInfo, onStageNotice) {
   };
 }
 
-function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
+function buildEmailHtmlReport(items, alertStatus) {
   const count = items.length;
-  const storeCurrency = storeMeta.currencyCode || items[0]?.store_currency || "USD";
-  const fxRate = Number(storeMeta.fxRate || items[0]?.fx_rate || 1);
   let totalRetailUsd = 0;
   let totalProfitUsd = 0;
-  let totalRetailStore = 0;
 
   const rowsHtml = items
     .map((item) => {
       const wholesaleUsd = parseFloat(String(item.wholesale_cost || "0").replace(/[^0-9.]/g, "")) || 0;
       const retailUsd = parseFloat(String(item.retail_price || "0").replace(/[^0-9.]/g, "")) || 0;
+      const compareUsd = parseFloat(String(item.compare_at_price || "0").replace(/[^0-9.]/g, "")) || 0;
       const profitUsd = parseFloat(String(item.profit_per_unit || "0").replace(/[^0-9.]/g, "")) || 0;
-      const storeRetail = parseFloat(String(item.store_retail_price || retailUsd)) || 0;
       totalRetailUsd += retailUsd;
       totalProfitUsd += profitUsd;
-      totalRetailStore += storeRetail;
-
-      const storeRetailFormatted = formatMoney(storeRetail, storeCurrency);
-      const showDual = storeCurrency !== "USD";
 
       return `
       <tr>
@@ -869,11 +890,11 @@ function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
         </td>
         <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#475569;white-space:nowrap;">
           <div>$${wholesaleUsd.toFixed(2)}</div>
-          ${item.has_explicit_cost === false ? `<div style="font-size:11px;color:#6366f1;">AI Est.</div>` : ""}
+          ${item.has_explicit_cost === false ? `<div style="font-size:11px;color:#4f46e5;">AI Est.</div>` : ""}
         </td>
         <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
-          <div style="font-size:14px;font-weight:700;color:#059669;">${escapeHtml(storeRetailFormatted)}</div>
-          ${showDual ? `<div style="font-size:11px;color:#64748b;">$${retailUsd.toFixed(2)} USD</div>` : ""}
+          <div style="font-size:14px;font-weight:700;color:#059669;">$${retailUsd.toFixed(2)}</div>
+          ${compareUsd > 0 ? `<div style="font-size:11px;color:#94a3b8;text-decoration:line-through;">$${compareUsd.toFixed(2)}</div>` : ""}
         </td>
         <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:600;color:#047857;white-space:nowrap;">+${escapeHtml(item.gross_margin)}<div style="font-size:11px;color:#64748b;font-weight:400;">+$${profitUsd.toFixed(2)} profit</div></td>
         <td valign="middle" style="padding:14px 10px;border-bottom:1px solid #e2e8f0;white-space:nowrap;">
@@ -888,7 +909,6 @@ function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
 
   const avgMargin = totalRetailUsd > 0 ? ((totalProfitUsd / totalRetailUsd) * 100).toFixed(1) + "%" : "0%";
   const runDate = new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
-  const fxBanner = storeCurrency !== "USD" ? ` &bull; 1 USD = ${formatMoney(fxRate, storeCurrency)} ${storeCurrency}` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -905,7 +925,7 @@ function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
                   <td valign="middle">
                     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#93c5fd;margin-bottom:4px;">Webskitters Automation Suite</div>
                     <h1 style="margin:0;font-size:20px;font-weight:700;color:#ffffff;">Shopify Catalog Enrichment Report</h1>
-                    <div style="font-size:12.5px;color:#cbd5e1;margin-top:4px;">Gemini Vision AI &bull; 2.4x Pricing${escapeHtml(fxBanner)} &bull; ${escapeHtml(runDate)}</div>
+                    <div style="font-size:12.5px;color:#cbd5e1;margin-top:4px;">Gemini Vision AI &bull; 2.4x Margin Pricing &bull; ${escapeHtml(runDate)}</div>
                   </td>
                   <td valign="middle" align="right">
                     <span style="display:inline-block;background-color:#059669;color:#ffffff;font-size:12px;font-weight:700;padding:7px 14px;border-radius:999px;">Ready for Review</span>
@@ -916,7 +936,7 @@ function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
           </tr>
           <tr>
             <td style="background-color:#ecfdf5;border-bottom:1px solid #a7f3d0;padding:12px 28px;font-size:13px;color:#065f46;font-weight:600;">
-              &#9989; ${count} product${count > 1 ? "s" : ""} enriched and saved in Shopify (${escapeHtml(storeCurrency)}) as <strong>Draft</strong> listings &bull; ${escapeHtml(alertStatus)}
+              &#9989; ${count} product${count > 1 ? "s" : ""} enriched and saved in Shopify as <strong>Draft</strong> listings &bull; ${escapeHtml(alertStatus)}
             </td>
           </tr>
           <tr>
@@ -929,12 +949,12 @@ function buildEmailHtmlReport(items, alertStatus, storeMeta = {}) {
                   </td>
                   <td width="1.3%"></td>
                   <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Store Retail (${escapeHtml(storeCurrency)})</div>
-                    <div style="font-size:20px;font-weight:800;color:#059669;margin-top:4px;">${escapeHtml(formatMoney(totalRetailStore, storeCurrency))}</div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Total Retail Value</div>
+                    <div style="font-size:20px;font-weight:800;color:#059669;margin-top:4px;">$${totalRetailUsd.toFixed(2)}</div>
                   </td>
                   <td width="1.3%"></td>
                   <td width="24%" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;">
-                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Est. Profit (USD)</div>
+                    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#64748b;">Est. Profit</div>
                     <div style="font-size:20px;font-weight:800;color:#047857;margin-top:4px;">$${totalProfitUsd.toFixed(2)}</div>
                   </td>
                   <td width="1.3%"></td>
@@ -1118,7 +1138,7 @@ async function processRow(job, index, row, shopCredsPromise) {
       store_retail_price: shopPayload.pricing.store_retail_price,
       store_compare_at_price: shopPayload.pricing.store_compare_at_price,
       price_rationale: shopPayload.priceRationale,
-      notice: `Syncing Draft & ${shopCreds.currencyCode} pricing (${formatMoney(shopPayload.pricing.store_retail_price, shopCreds.currencyCode)}) to Shopify...`,
+      notice: `Syncing Draft listing to Shopify store...`,
     });
 
     const created = await createShopifyDraft(shopCreds, shopPayload, imageInfo, updateState);

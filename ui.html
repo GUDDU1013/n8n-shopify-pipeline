@@ -648,7 +648,7 @@
           <div class="helper-box">
             <strong>Sheet Format Tips:</strong><br/>
             Columns in order: <code>SKU</code>, <code>Item Name (Optional)</code>, <code>Wholesale Cost USD (Optional)</code>, <code>Image URL</code>.<br/>
-            Even if Name or Cost is missing or mismatched, Gemini Vision AI inspects the image to set the real title &amp; USD price, then converts automatically to your Shopify store currency (INR &rupee;).
+            Even if Name or Cost is missing or mismatched, Gemini Vision AI inspects the image to set the real product title &amp; USD price (and converts automatically inside Shopify Admin).
           </div>
         </div>
 
@@ -740,11 +740,11 @@
             <div class="kpi-val" id="kpiDone">0 / 0</div>
           </div>
           <div class="kpi">
-            <div class="kpi-label" id="kpiRetailLabel">Store Retail (INR)</div>
-            <div class="kpi-val" id="kpiRetail" style="color:var(--accent);">₹0</div>
+            <div class="kpi-label" id="kpiRetailLabel">Total Retail Value</div>
+            <div class="kpi-val" id="kpiRetail" style="color:var(--accent);">$0.00</div>
           </div>
           <div class="kpi">
-            <div class="kpi-label">Est. Profit (USD)</div>
+            <div class="kpi-label">Est. Profit</div>
             <div class="kpi-val" id="kpiProfit" style="color:#047857;">$0.00</div>
           </div>
         </div>
@@ -812,14 +812,6 @@
     let elapsedTimer = null;
     let startedAt = 0;
     let rowCache = {};
-
-    const CURRENCY_SYM = { USD: "$", INR: "₹", EUR: "€", GBP: "£", CAD: "CA$", AUD: "A$" };
-    function fmtStore(amount, code) {
-      const c = code || "INR";
-      const sym = CURRENCY_SYM[c] || `${c} `;
-      const n = Number(amount) || 0;
-      return c === "INR" ? `${sym}${Math.round(n).toLocaleString("en-IN")}` : `${sym}${n.toFixed(2)}`;
-    }
 
     document.getElementById("loadSampleBtn").addEventListener("click", () => {
       document.getElementById("sheetUrl").value = SAMPLE_SHEET;
@@ -909,10 +901,9 @@
         ? `<div>$${Number(row.wholesale_cost).toFixed(2)}</div>${row.has_explicit_cost === false ? `<div style="font-size:11px;color:#4f46e5;font-weight:600;">AI Estimated</div>` : ""}`
         : `<span style="color:#64748b;font-size:12px;">AI Auto</span>`;
 
-      const storeCur = row.store_currency || "INR";
       const retailHtml = row.retail_price
-        ? `<div style="font-weight:700;color:#059669;">${esc(fmtStore(row.store_retail_price || row.retail_price, storeCur))}</div>
-           <div style="font-size:11px;color:#64748b;">$${esc(row.retail_price)} USD</div>`
+        ? `<div style="font-weight:700;color:#059669;">$${esc(row.retail_price)}</div>
+           ${row.compare_at_price ? `<div style="font-size:11px;color:#94a3b8;text-decoration:line-through;">$${esc(row.compare_at_price)}</div>` : ""}`
         : `<span style="color:#94a3b8;font-size:12px;">Pending AI</span>`;
 
       const marginHtml = row.gross_margin ? `+${esc(row.gross_margin)}` : `<span style="color:#94a3b8;">—</span>`;
@@ -943,23 +934,21 @@
       const doneCount = job.completed || 0;
       const finishedCount = doneCount + (job.failed || 0);
       const pct = total > 0 ? Math.round((finishedCount / total) * 100) : 0;
-      const cur = job.storeCurrency || "INR";
 
       progressBar.style.width = `${pct}%`;
       counterFraction.textContent = `${doneCount} / ${total}`;
       kpiPct.textContent = `${pct}%`;
       kpiDone.textContent = `${doneCount} / ${total}`;
-      document.getElementById("kpiRetailLabel").textContent = `Store Retail (${cur})`;
 
-      let storeRetailSum = 0;
+      let retailUsdSum = 0;
       let profitUsdSum = 0;
       (job.rows || []).forEach((r) => {
         if (r.status === "done") {
-          storeRetailSum += parseFloat(r.store_retail_price || r.retail_price) || 0;
+          retailUsdSum += parseFloat(r.retail_price) || 0;
           profitUsdSum += parseFloat(r.profit_per_unit) || 0;
         }
       });
-      kpiRetail.textContent = fmtStore(storeRetailSum, cur);
+      kpiRetail.textContent = `$${retailUsdSum.toFixed(2)}`;
       kpiProfit.textContent = `$${profitUsdSum.toFixed(2)}`;
 
       if (job.status === "completed" || job.status === "failed") {
