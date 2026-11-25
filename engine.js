@@ -197,9 +197,18 @@ async function resizeBufferWithVips(buf, maxDim, quality = 85) {
   const tmpId = crypto.randomBytes(6).toString("hex");
   const inPath = path.join(os.tmpdir(), `img-in-${tmpId}`);
   const outPath = path.join(os.tmpdir(), `img-out-${tmpId}.jpg`);
+  const qv = quality >= 82 ? "3" : "6";
   try {
     fs.writeFileSync(inPath, buf);
-    await execFileAsync("vipsthumbnail", [inPath, "--size", `${maxDim}x${maxDim}>`, "-o", `${outPath}[Q=${quality}]`]);
+    try {
+      await execFileAsync("ffmpeg", [
+        "-y", "-v", "error", "-i", inPath, "-frames:v", "1",
+        "-vf", `scale='min(${maxDim},iw)':'min(${maxDim},ih)':force_original_aspect_ratio=decrease`,
+        "-q:v", qv, outPath,
+      ]);
+    } catch {
+      await execFileAsync("vipsthumbnail", [inPath, "--size", `${maxDim}x${maxDim}>`, "-o", `${outPath}[Q=${quality}]`]);
+    }
     return fs.readFileSync(outPath);
   } finally {
     try { fs.unlinkSync(inPath); } catch {}
