@@ -5,8 +5,8 @@
   "nodes": [
     {
       "parameters": {
-        "formTitle": "Run Demo Row: Supplier Product Enrichment",
-        "formDescription": "Live interactive prospect demo: Enriches raw supplier product with Gemini Vision AI, applies 2.4x pricing, and creates an SEO-optimized Draft listing in Shopify.",
+        "formTitle": "Supplier Catalog Enrichment Demo",
+        "formDescription": "Interactive demo: Enriches supplier product data with Gemini Vision AI, applies 2.4x margin pricing, and creates an SEO-optimized draft catalog entry.",
         "formFields": {
           "values": [
             {

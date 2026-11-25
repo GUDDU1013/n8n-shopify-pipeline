@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 
-export N8N_PORT="${PORT:-10000}"
+export PORT="${PORT:-10000}"
+export N8N_PORT="5678"
+export N8N_LISTEN_ADDRESS="127.0.0.1"
 
 if [ -n "$RENDER_EXTERNAL_URL" ]; then
   CLEAN_URL="${RENDER_EXTERNAL_URL%/}"
@@ -20,31 +22,41 @@ if [ ! -f /app/n8n-data/.n8n/database.sqlite ]; then
   n8n publish:workflow --id=67VqEYKQdxEn1RfQ || true
 fi
 
-# Auto-setup owner account after boot to protect n8n Editor while keeping public form active
+# Lightweight gatekeeper proxy on $PORT -> 127.0.0.1:5678
+node /app/proxy.js &
+
+# Single non-overlapping owner setup after n8n internal healthz responds 200
 node -e '
 const http = require("http");
-const port = process.env.N8N_PORT || "10000";
 const email = process.env.N8N_OWNER_EMAIL;
 const password = process.env.N8N_OWNER_PASSWORD;
 if (!email || !password) process.exit(0);
 const payload = JSON.stringify({ email, firstName: "Ridam", lastName: "Chakraborty", password });
-setTimeout(() => {
-  const timer = setInterval(() => {
-    const req = http.request("http://127.0.0.1:" + port + "/rest/owner/setup", {
+let busy = false;
+const timer = setInterval(() => {
+  if (busy) return;
+  busy = true;
+  http.get("http://127.0.0.1:5678/healthz", { timeout: 3000 }, (hr) => {
+    hr.resume();
+    if (hr.statusCode !== 200) { busy = false; return; }
+    const req = http.request("http://127.0.0.1:5678/rest/owner/setup", {
       method: "POST",
+      timeout: 30000,
       headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }
-    }, res => {
+    }, (res) => {
       res.resume();
+      busy = false;
       if (res.statusCode === 200 || res.statusCode === 400 || res.statusCode === 403) {
         console.log("[Boot] Owner setup state:", res.statusCode);
         clearInterval(timer);
       }
     });
-    req.on("error", () => {});
+    req.on("error", () => { busy = false; });
+    req.on("timeout", () => { req.destroy(); busy = false; });
     req.write(payload);
     req.end();
-  }, 5000);
-}, 15000);
+  }).on("error", () => { busy = false; });
+}, 10000);
 ' &
 
 exec n8n start

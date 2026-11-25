@@ -5,13 +5,14 @@ RUN mkdir -p /app/n8n-data /home/node/.n8n && chmod -R 777 /app /home/node/.n8n
 
 COPY workflow.json /app/workflow.json
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh && chmod 644 /app/workflow.json
+COPY proxy.js /app/proxy.js
+RUN chmod +x /app/entrypoint.sh && chmod 644 /app/workflow.json /app/proxy.js
 
 ENV HOME=/home/node \
     N8N_USER_FOLDER=/app/n8n-data \
     N8N_LISTEN_ADDRESS=0.0.0.0 \
     N8N_PROTOCOL=https \
-    N8N_PROXY_HOPS=1 \
+    N8N_PROXY_HOPS=2 \
     N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false \
     N8N_DIAGNOSTICS_ENABLED=false \
     N8N_VERSION_NOTIFICATIONS_ENABLED=false \
